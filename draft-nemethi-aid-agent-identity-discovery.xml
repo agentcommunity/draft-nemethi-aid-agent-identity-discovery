@@ -118,10 +118,11 @@
     <section anchor="record-format">
       <name>AID Record Format</name>
       <t>
-        A provider advertises an agent service by publishing a single TXT record at `_agent.&lt;domain&gt;`.
-        For AID v1.x, TXT is the deployed discovery record type because it is widely available across
-        DNS providers and registrars. Future versions of AID may adopt a more structured record type,
-        but the `_agent` label remains stable; see <xref target="label-stability"/>.
+        A provider MUST advertise its agent service by publishing a single TXT record at
+        `_agent.&lt;domain&gt;`. For AID v1.x, agents MUST use DNS TXT records for discovery. TXT is the
+        deployed discovery record type because it is widely available across DNS providers and
+        registrars. Future versions of AID may adopt a more structured record type, but the `_agent`
+        label remains stable; see <xref target="label-stability"/>.
       </t>
 
       <section anchor="syntax-and-parsing">
@@ -353,8 +354,8 @@ _agent._a2a.example.com. 300 IN TXT (
         execution.
       </t>
       <ul>
-        <li>Providers SHOULD sign AID records with DNSSEC when available.</li>
-        <li>Remote HTTPS endpoints MUST perform standard TLS certificate and hostname validation as described in <xref target="RFC6125"/>.</li>
+        <li>Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform DNSSEC validation when DNSSEC-signed answers are available.</li>
+        <li>A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <xref target="RFC6125"/>.</li>
         <li>When `pka` is present, clients MUST verify endpoint control of the private key as described in <xref target="pka-handshake"/>.</li>
         <li>Clients SHOULD warn if a previously observed `pka` disappears.</li>
         <li>Clients that support `proto=local` MUST implement the safeguards described below.</li>
