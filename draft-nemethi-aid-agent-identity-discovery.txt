@@ -155,12 +155,12 @@ Table of Contents
 
 3.  AID Record Format
 
-   A provider advertises an agent service by publishing a single TXT
-   record at `_agent.<domain>`.  For AID v1.x, TXT is the deployed
-   discovery record type because it is widely available across DNS
-   providers and registrars.  Future versions of AID may adopt a more
-   structured record type, but the `_agent` label remains stable; see
-   Section 7.1.
+   A provider MUST advertise its agent service by publishing a single
+   TXT record at `_agent.<domain>`. For AID v1.x, agents MUST use DNS
+   TXT records for discovery.  TXT is the deployed discovery record type
+   because it is widely available across DNS providers and registrars.
+   Future versions of AID may adopt a more structured record type, but
+   the `_agent` label remains stable; see Section 7.1.
 
 3.1.  Syntax and Parsing
 
@@ -373,9 +373,12 @@ Table of Contents
    remote endpoints, and explicit client safeguards for local execution.
 
    *  Providers SHOULD sign AID records with DNSSEC when available.
+      Clients SHOULD perform DNSSEC validation when DNSSEC-signed
+      answers are available.
 
-   *  Remote HTTPS endpoints MUST perform standard TLS certificate and
-      hostname validation as described in [RFC6125].
+   *  A `remote` agent's `uri` MUST use `https://`. Clients MUST perform
+      standard TLS certificate and hostname validation as described in
+      [RFC6125].
 
    *  When `pka` is present, clients MUST verify endpoint control of the
       private key as described in Appendix D.

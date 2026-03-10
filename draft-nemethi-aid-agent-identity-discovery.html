@@ -1350,10 +1350,11 @@ svg :is([fill="white"], [fill^="#fff"]) {
 <a href="#section-3" class="section-number selfRef">3. </a><a href="#name-aid-record-format" class="section-name selfRef">AID Record Format</a>
       </h2>
 <p id="section-3-1">
-        A provider advertises an agent service by publishing a single TXT record at `_agent.&lt;domain&gt;`.
-        For AID v1.x, TXT is the deployed discovery record type because it is widely available across
-        DNS providers and registrars. Future versions of AID may adopt a more structured record type,
-        but the `_agent` label remains stable; see <a href="#label-stability" class="auto internal xref">Section 7.1</a>.<a href="#section-3-1" class="pilcrow">¶</a></p>
+        A provider MUST advertise its agent service by publishing a single TXT record at
+        `_agent.&lt;domain&gt;`. For AID v1.x, agents MUST use DNS TXT records for discovery. TXT is the
+        deployed discovery record type because it is widely available across DNS providers and
+        registrars. Future versions of AID may adopt a more structured record type, but the `_agent`
+        label remains stable; see <a href="#label-stability" class="auto internal xref">Section 7.1</a>.<a href="#section-3-1" class="pilcrow">¶</a></p>
 <div id="syntax-and-parsing">
 <section id="section-3.1">
         <h3 id="name-syntax-and-parsing">
@@ -1652,9 +1653,9 @@ _agent._a2a.example.com. 300 IN TXT (
         depends on DNS integrity, TLS for remote endpoints, and explicit client safeguards for local
         execution.<a href="#section-5-1" class="pilcrow">¶</a></p>
 <ul class="normal">
-<li class="normal" id="section-5-2.1">Providers SHOULD sign AID records with DNSSEC when available.<a href="#section-5-2.1" class="pilcrow">¶</a>
+<li class="normal" id="section-5-2.1">Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform DNSSEC validation when DNSSEC-signed answers are available.<a href="#section-5-2.1" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-5-2.2">Remote HTTPS endpoints MUST perform standard TLS certificate and hostname validation as described in <span>[<a href="#RFC6125" class="cite xref">RFC6125</a>]</span>.<a href="#section-5-2.2" class="pilcrow">¶</a>
+        <li class="normal" id="section-5-2.2">A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <span>[<a href="#RFC6125" class="cite xref">RFC6125</a>]</span>.<a href="#section-5-2.2" class="pilcrow">¶</a>
 </li>
         <li class="normal" id="section-5-2.3">When `pka` is present, clients MUST verify endpoint control of the private key as described in <a href="#pka-handshake" class="auto internal xref">Appendix D</a>.<a href="#section-5-2.3" class="pilcrow">¶</a>
 </li>
