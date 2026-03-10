@@ -128,8 +128,9 @@
       <section anchor="syntax-and-parsing">
         <name>Syntax and Parsing</name>
         <t>
-          The record MUST be a semicolon-delimited sequence of `key=value` pairs. Clients SHOULD trim
-          leading and trailing whitespace from keys and values. Clients MUST ignore unknown keys.
+          The record MUST be a single semicolon-delimited string of `key=value` pairs. Clients SHOULD
+          `trim()` leading and trailing whitespace from keys and values. Clients MUST ignore unknown
+          keys.
         </t>
         <t>
           If a DNS server splits the TXT record into multiple 255-octet strings, the client MUST
@@ -225,7 +226,7 @@ _agent.local.test. 300 IN TXT (
         <ol>
           <li>Normalize the domain. If the input contains non-ASCII labels, convert them to A-label form as described in <xref target="RFC5890"/>.</li>
           <li>Query the TXT record at `_agent.&lt;exact-host-user-entered&gt;`. The client MUST NOT walk up the DNS hierarchy. If no record is found or the lookup fails, the client MAY try the `.well-known` fallback on the same exact host; see <xref target="well-known-fallback"/>.</li>
-          <li>Parse the TXT answer set as semicolon-delimited `key=value` records. If exactly one valid AID record is present at the queried DNS name, use it. If more than one valid AID record is present at the same queried DNS name, the client MUST fail due to ambiguity. Malformed answers do not matter when there is exactly one valid AID record.</li>
+          <li>Parse the TXT answer set as semicolon-delimited `key=value` records. Key comparison MUST be case-insensitive, and clients MUST recognize single-letter aliases for all defined keys. If exactly one valid AID record is present at the queried DNS name, use it. If more than one valid AID record is present at the same queried DNS name, the client MUST fail due to ambiguity. Malformed answers do not matter when there is exactly one valid AID record.</li>
           <li>If `docs` is present, the client MAY display it. If `dep` is in the future, the client SHOULD warn. If `dep` is in the past, the client SHOULD fail gracefully.</li>
           <li>If `pka` is present, the client MUST perform the endpoint-proof procedure in <xref target="pka-handshake"/>. Providers MUST publish `kid` whenever `pka` is present.</li>
           <li>If validation succeeds, return the discovered details. If the client does not support the selected protocol token, it MUST fail with the appropriate error.</li>
@@ -356,8 +357,7 @@ _agent._a2a.example.com. 300 IN TXT (
       <ul>
         <li>Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform DNSSEC validation when DNSSEC-signed answers are available.</li>
         <li>A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <xref target="RFC6125"/>.</li>
-        <li>When `pka` is present, clients MUST verify endpoint control of the private key as described in <xref target="pka-handshake"/>.</li>
-        <li>Clients SHOULD warn if a previously observed `pka` disappears.</li>
+        <li>When `pka` is present, clients MUST verify endpoint control of the private key as described in <xref target="pka-handshake"/>. Providers MUST publish `kid` when `pka` is present. Clients SHOULD warn if a previously observed `pka` disappears.</li>
         <li>Clients that support `proto=local` MUST implement the safeguards described below.</li>
         <li>Clients MUST NOT automatically follow cross-origin redirects from a discovered endpoint.</li>
       </ul>
@@ -585,19 +585,49 @@ _agent._a2a.example.com. 300 IN TXT (
       <name>References</name>
       <references>
         <name>Normative References</name>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.5890.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6125.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6335.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8174.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8552.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9421.xml"/>
+        <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
+          <front><title>Key words for use in RFCs to Indicate Requirement Levels</title><author fullname="S. Bradner"/><date month="March" year="1997"/></front>
+          <seriesInfo name="RFC" value="2119"/>
+        </reference>
+        <reference anchor="RFC5890" target="https://www.rfc-editor.org/rfc/rfc5890">
+          <front><title>Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework</title><author fullname="J. Klensin"/><date month="August" year="2010"/></front>
+          <seriesInfo name="RFC" value="5890"/>
+        </reference>
+        <reference anchor="RFC6125" target="https://www.rfc-editor.org/rfc/rfc6125">
+          <front><title>Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)</title><author fullname="P. Saint-Andre"/><date month="March" year="2011"/></front>
+          <seriesInfo name="RFC" value="6125"/>
+        </reference>
+        <reference anchor="RFC6335" target="https://www.rfc-editor.org/rfc/rfc6335">
+          <front><title>Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry</title><author fullname="M. Cotton"/><date month="August" year="2011"/></front>
+          <seriesInfo name="RFC" value="6335"/>
+        </reference>
+        <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
+          <front><title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title><author fullname="B. Leiba"/><date month="May" year="2017"/></front>
+          <seriesInfo name="RFC" value="8174"/>
+        </reference>
+        <reference anchor="RFC8552" target="https://www.rfc-editor.org/rfc/rfc8552">
+          <front><title>Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves</title><author fullname="A. Sullivan"/><date month="March" year="2019"/></front>
+          <seriesInfo name="RFC" value="8552"/>
+        </reference>
+        <reference anchor="RFC9421" target="https://www.rfc-editor.org/rfc/rfc9421">
+          <front><title>HTTP Message Signatures</title><author fullname="R. Fielding"/><date month="November" year="2023"/></front>
+          <seriesInfo name="RFC" value="9421"/>
+        </reference>
       </references>
       <references>
         <name>Informative References</name>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2782.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8615.xml"/>
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9460.xml"/>
+        <reference anchor="RFC2782" target="https://www.rfc-editor.org/rfc/rfc2782">
+          <front><title>A DNS RR for specifying the location of services (DNS SRV)</title><author fullname="A. Gulbrandsen"/><date month="February" year="2000"/></front>
+          <seriesInfo name="RFC" value="2782"/>
+        </reference>
+        <reference anchor="RFC8615" target="https://www.rfc-editor.org/rfc/rfc8615">
+          <front><title>Well-Known Uniform Resource Identifiers (URIs)</title><author fullname="M. Nottingham"/><date month="May" year="2019"/></front>
+          <seriesInfo name="RFC" value="8615"/>
+        </reference>
+        <reference anchor="RFC9460" target="https://www.rfc-editor.org/rfc/rfc9460">
+          <front><title>Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)</title><author fullname="B. Schwartz"/><date month="November" year="2023"/></front>
+          <seriesInfo name="RFC" value="9460"/>
+        </reference>
       </references>
     </references>
 
