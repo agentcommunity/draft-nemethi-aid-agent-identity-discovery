@@ -164,9 +164,9 @@ Table of Contents
 
 3.1.  Syntax and Parsing
 
-   The record MUST be a semicolon-delimited sequence of `key=value`
-   pairs.  Clients SHOULD trim leading and trailing whitespace from keys
-   and values.  Clients MUST ignore unknown keys.
+   The record MUST be a single semicolon-delimited string of `key=value`
+   pairs.  Clients SHOULD `trim()` leading and trailing whitespace from
+   keys and values.  Clients MUST ignore unknown keys.
 
    If a DNS server splits the TXT record into multiple 255-octet
    strings, the client MUST concatenate them in order before parsing.
@@ -263,11 +263,13 @@ Table of Contents
        fallback on the same exact host; see Appendix E.
 
    3.  Parse the TXT answer set as semicolon-delimited `key=value`
-       records.  If exactly one valid AID record is present at the
-       queried DNS name, use it.  If more than one valid AID record is
-       present at the same queried DNS name, the client MUST fail due to
-       ambiguity.  Malformed answers do not matter when there is exactly
-       one valid AID record.
+       records.  Key comparison MUST be case-insensitive, and clients
+       MUST recognize single-letter aliases for all defined keys.  If
+       exactly one valid AID record is present at the queried DNS name,
+       use it.  If more than one valid AID record is present at the same
+       queried DNS name, the client MUST fail due to ambiguity.
+       Malformed answers do not matter when there is exactly one valid
+       AID record.
 
    4.  If `docs` is present, the client MAY display it.  If `dep` is in
        the future, the client SHOULD warn.  If `dep` is in the past, the
@@ -381,9 +383,9 @@ Table of Contents
       [RFC6125].
 
    *  When `pka` is present, clients MUST verify endpoint control of the
-      private key as described in Appendix D.
-
-   *  Clients SHOULD warn if a previously observed `pka` disappears.
+      private key as described in Appendix D.  Providers MUST publish
+      `kid` when `pka` is present.  Clients SHOULD warn if a previously
+      observed `pka` disappears.
 
    *  Clients that support `proto=local` MUST implement the safeguards
       described below.
@@ -592,57 +594,51 @@ Table of Contents
 10.1.  Normative References
 
    [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
-              Requirement Levels", BCP 14, RFC 2119,
-              DOI 10.17487/RFC2119, March 1997,
-              <https://www.rfc-editor.org/info/rfc2119>.
+              Requirement Levels", RFC 2119, March 1997,
+              <https://www.rfc-editor.org/rfc/rfc2119>.
 
    [RFC5890]  Klensin, J., "Internationalized Domain Names for
               Applications (IDNA): Definitions and Document Framework",
-              RFC 5890, DOI 10.17487/RFC5890, August 2010,
-              <https://www.rfc-editor.org/info/rfc5890>.
+              RFC 5890, August 2010,
+              <https://www.rfc-editor.org/rfc/rfc5890>.
 
-   [RFC6125]  Saint-Andre, P. and J. Hodges, "Representation and
-              Verification of Domain-Based Application Service Identity
-              within Internet Public Key Infrastructure Using X.509
-              (PKIX) Certificates in the Context of Transport Layer
-              Security (TLS)", RFC 6125, DOI 10.17487/RFC6125, March
-              2011, <https://www.rfc-editor.org/info/rfc6125>.
+   [RFC6125]  Saint-Andre, P., "Representation and Verification of
+              Domain-Based Application Service Identity within Internet
+              Public Key Infrastructure Using X.509 (PKIX) Certificates
+              in the Context of Transport Layer Security (TLS)",
+              RFC 6125, March 2011,
+              <https://www.rfc-editor.org/rfc/rfc6125>.
 
-   [RFC6335]  Cotton, M., Eggert, L., Touch, J., Westerlund, M., and S.
-              Cheshire, "Internet Assigned Numbers Authority (IANA)
+   [RFC6335]  Cotton, M., "Internet Assigned Numbers Authority (IANA)
               Procedures for the Management of the Service Name and
-              Transport Protocol Port Number Registry", BCP 165,
-              RFC 6335, DOI 10.17487/RFC6335, August 2011,
-              <https://www.rfc-editor.org/info/rfc6335>.
+              Transport Protocol Port Number Registry", RFC 6335, August
+              2011, <https://www.rfc-editor.org/rfc/rfc6335>.
 
    [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
-              2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
-              May 2017, <https://www.rfc-editor.org/info/rfc8174>.
+              2119 Key Words", RFC 8174, May 2017,
+              <https://www.rfc-editor.org/rfc/rfc8174>.
 
-   [RFC8552]  Crocker, D., "Scoped Interpretation of DNS Resource
+   [RFC8552]  Sullivan, A., "Scoped Interpretation of DNS Resource
               Records through "Underscored" Naming of Attribute Leaves",
-              BCP 222, RFC 8552, DOI 10.17487/RFC8552, March 2019,
-              <https://www.rfc-editor.org/info/rfc8552>.
+              RFC 8552, March 2019,
+              <https://www.rfc-editor.org/rfc/rfc8552>.
 
-   [RFC9421]  Backman, A., Ed., Richer, J., Ed., and M. Sporny, "HTTP
-              Message Signatures", RFC 9421, DOI 10.17487/RFC9421,
-              February 2024, <https://www.rfc-editor.org/info/rfc9421>.
+   [RFC9421]  Fielding, R., "HTTP Message Signatures", RFC 9421,
+              November 2023, <https://www.rfc-editor.org/rfc/rfc9421>.
 
 10.2.  Informative References
 
-   [RFC2782]  Gulbrandsen, A., Vixie, P., and L. Esibov, "A DNS RR for
-              specifying the location of services (DNS SRV)", RFC 2782,
-              DOI 10.17487/RFC2782, February 2000,
-              <https://www.rfc-editor.org/info/rfc2782>.
+   [RFC2782]  Gulbrandsen, A., "A DNS RR for specifying the location of
+              services (DNS SRV)", RFC 2782, February 2000,
+              <https://www.rfc-editor.org/rfc/rfc2782>.
 
    [RFC8615]  Nottingham, M., "Well-Known Uniform Resource Identifiers
-              (URIs)", RFC 8615, DOI 10.17487/RFC8615, May 2019,
-              <https://www.rfc-editor.org/info/rfc8615>.
+              (URIs)", RFC 8615, May 2019,
+              <https://www.rfc-editor.org/rfc/rfc8615>.
 
-   [RFC9460]  Schwartz, B., Bishop, M., and E. Nygren, "Service Binding
-              and Parameter Specification via the DNS (SVCB and HTTPS
-              Resource Records)", RFC 9460, DOI 10.17487/RFC9460,
-              November 2023, <https://www.rfc-editor.org/info/rfc9460>.
+   [RFC9460]  Schwartz, B., "Service Binding and Parameter Specification
+              via the DNS (SVCB and HTTPS Resource Records)", RFC 9460,
+              November 2023, <https://www.rfc-editor.org/rfc/rfc9460>.
 
 Appendix A.  Authentication Scheme Registry
 

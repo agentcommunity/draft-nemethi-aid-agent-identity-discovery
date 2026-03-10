@@ -1361,8 +1361,9 @@ svg :is([fill="white"], [fill^="#fff"]) {
 <a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-syntax-and-parsing" class="section-name selfRef">Syntax and Parsing</a>
         </h3>
 <p id="section-3.1-1">
-          The record MUST be a semicolon-delimited sequence of `key=value` pairs. Clients SHOULD trim
-          leading and trailing whitespace from keys and values. Clients MUST ignore unknown keys.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+          The record MUST be a single semicolon-delimited string of `key=value` pairs. Clients SHOULD
+          `trim()` leading and trailing whitespace from keys and values. Clients MUST ignore unknown
+          keys.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
 <p id="section-3.1-2">
           If a DNS server splits the TXT record into multiple 255-octet strings, the client MUST
           concatenate them in order before parsing. Providers SHOULD keep the full record under 255
@@ -1502,7 +1503,7 @@ _agent.local.test. 300 IN TXT (
 </li>
           <li id="section-4.1-2.2">Query the TXT record at `_agent.&lt;exact-host-user-entered&gt;`. The client MUST NOT walk up the DNS hierarchy. If no record is found or the lookup fails, the client MAY try the `.well-known` fallback on the same exact host; see <a href="#well-known-fallback" class="auto internal xref">Appendix E</a>.<a href="#section-4.1-2.2" class="pilcrow">¶</a>
 </li>
-          <li id="section-4.1-2.3">Parse the TXT answer set as semicolon-delimited `key=value` records. If exactly one valid AID record is present at the queried DNS name, use it. If more than one valid AID record is present at the same queried DNS name, the client MUST fail due to ambiguity. Malformed answers do not matter when there is exactly one valid AID record.<a href="#section-4.1-2.3" class="pilcrow">¶</a>
+          <li id="section-4.1-2.3">Parse the TXT answer set as semicolon-delimited `key=value` records. Key comparison MUST be case-insensitive, and clients MUST recognize single-letter aliases for all defined keys. If exactly one valid AID record is present at the queried DNS name, use it. If more than one valid AID record is present at the same queried DNS name, the client MUST fail due to ambiguity. Malformed answers do not matter when there is exactly one valid AID record.<a href="#section-4.1-2.3" class="pilcrow">¶</a>
 </li>
           <li id="section-4.1-2.4">If `docs` is present, the client MAY display it. If `dep` is in the future, the client SHOULD warn. If `dep` is in the past, the client SHOULD fail gracefully.<a href="#section-4.1-2.4" class="pilcrow">¶</a>
 </li>
@@ -1657,13 +1658,11 @@ _agent._a2a.example.com. 300 IN TXT (
 </li>
         <li class="normal" id="section-5-2.2">A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <span>[<a href="#RFC6125" class="cite xref">RFC6125</a>]</span>.<a href="#section-5-2.2" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-5-2.3">When `pka` is present, clients MUST verify endpoint control of the private key as described in <a href="#pka-handshake" class="auto internal xref">Appendix D</a>.<a href="#section-5-2.3" class="pilcrow">¶</a>
+        <li class="normal" id="section-5-2.3">When `pka` is present, clients MUST verify endpoint control of the private key as described in <a href="#pka-handshake" class="auto internal xref">Appendix D</a>. Providers MUST publish `kid` when `pka` is present. Clients SHOULD warn if a previously observed `pka` disappears.<a href="#section-5-2.3" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-5-2.4">Clients SHOULD warn if a previously observed `pka` disappears.<a href="#section-5-2.4" class="pilcrow">¶</a>
+        <li class="normal" id="section-5-2.4">Clients that support `proto=local` MUST implement the safeguards described below.<a href="#section-5-2.4" class="pilcrow">¶</a>
 </li>
-        <li class="normal" id="section-5-2.5">Clients that support `proto=local` MUST implement the safeguards described below.<a href="#section-5-2.5" class="pilcrow">¶</a>
-</li>
-        <li class="normal" id="section-5-2.6">Clients MUST NOT automatically follow cross-origin redirects from a discovered endpoint.<a href="#section-5-2.6" class="pilcrow">¶</a>
+        <li class="normal" id="section-5-2.5">Clients MUST NOT automatically follow cross-origin redirects from a discovered endpoint.<a href="#section-5-2.5" class="pilcrow">¶</a>
 </li>
       </ul>
 <p id="section-5-3">
@@ -1936,31 +1935,31 @@ _agent._a2a.example.com. 300 IN TXT (
 <dl class="references">
 <dt id="RFC2119">[RFC2119]</dt>
         <dd>
-<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc2119">https://www.rfc-editor.org/info/rfc2119</a>&gt;</span>. </dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">RFC 2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC5890">[RFC5890]</dt>
         <dd>
-<span class="refAuthor">Klensin, J.</span>, <span class="refTitle">"Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework"</span>, <span class="seriesInfo">RFC 5890</span>, <span class="seriesInfo">DOI 10.17487/RFC5890</span>, <time datetime="2010-08" class="refDate">August 2010</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc5890">https://www.rfc-editor.org/info/rfc5890</a>&gt;</span>. </dd>
+<span class="refAuthor">Klensin, J.</span>, <span class="refTitle">"Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework"</span>, <span class="seriesInfo">RFC 5890</span>, <time datetime="2010-08" class="refDate">August 2010</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc5890">https://www.rfc-editor.org/rfc/rfc5890</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC6125">[RFC6125]</dt>
         <dd>
-<span class="refAuthor">Saint-Andre, P.</span> and <span class="refAuthor">J. Hodges</span>, <span class="refTitle">"Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)"</span>, <span class="seriesInfo">RFC 6125</span>, <span class="seriesInfo">DOI 10.17487/RFC6125</span>, <time datetime="2011-03" class="refDate">March 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6125">https://www.rfc-editor.org/info/rfc6125</a>&gt;</span>. </dd>
+<span class="refAuthor">Saint-Andre, P.</span>, <span class="refTitle">"Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)"</span>, <span class="seriesInfo">RFC 6125</span>, <time datetime="2011-03" class="refDate">March 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6125">https://www.rfc-editor.org/rfc/rfc6125</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC6335">[RFC6335]</dt>
         <dd>
-<span class="refAuthor">Cotton, M.</span>, <span class="refAuthor">Eggert, L.</span>, <span class="refAuthor">Touch, J.</span>, <span class="refAuthor">Westerlund, M.</span>, and <span class="refAuthor">S. Cheshire</span>, <span class="refTitle">"Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry"</span>, <span class="seriesInfo">BCP 165</span>, <span class="seriesInfo">RFC 6335</span>, <span class="seriesInfo">DOI 10.17487/RFC6335</span>, <time datetime="2011-08" class="refDate">August 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6335">https://www.rfc-editor.org/info/rfc6335</a>&gt;</span>. </dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refTitle">"Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry"</span>, <span class="seriesInfo">RFC 6335</span>, <time datetime="2011-08" class="refDate">August 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6335">https://www.rfc-editor.org/rfc/rfc6335</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC8174">[RFC8174]</dt>
         <dd>
-<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8174">https://www.rfc-editor.org/info/rfc8174</a>&gt;</span>. </dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">RFC 8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC8552">[RFC8552]</dt>
         <dd>
-<span class="refAuthor">Crocker, D.</span>, <span class="refTitle">"Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves"</span>, <span class="seriesInfo">BCP 222</span>, <span class="seriesInfo">RFC 8552</span>, <span class="seriesInfo">DOI 10.17487/RFC8552</span>, <time datetime="2019-03" class="refDate">March 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8552">https://www.rfc-editor.org/info/rfc8552</a>&gt;</span>. </dd>
+<span class="refAuthor">Sullivan, A.</span>, <span class="refTitle">"Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves"</span>, <span class="seriesInfo">RFC 8552</span>, <time datetime="2019-03" class="refDate">March 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8552">https://www.rfc-editor.org/rfc/rfc8552</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC9421">[RFC9421]</dt>
       <dd>
-<span class="refAuthor">Backman, A., Ed.</span>, <span class="refAuthor">Richer, J., Ed.</span>, and <span class="refAuthor">M. Sporny</span>, <span class="refTitle">"HTTP Message Signatures"</span>, <span class="seriesInfo">RFC 9421</span>, <span class="seriesInfo">DOI 10.17487/RFC9421</span>, <time datetime="2024-02" class="refDate">February 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc9421">https://www.rfc-editor.org/info/rfc9421</a>&gt;</span>. </dd>
+<span class="refAuthor">Fielding, R.</span>, <span class="refTitle">"HTTP Message Signatures"</span>, <span class="seriesInfo">RFC 9421</span>, <time datetime="2023-11" class="refDate">November 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9421">https://www.rfc-editor.org/rfc/rfc9421</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 </dl>
 </section>
@@ -1971,15 +1970,15 @@ _agent._a2a.example.com. 300 IN TXT (
 <dl class="references">
 <dt id="RFC2782">[RFC2782]</dt>
         <dd>
-<span class="refAuthor">Gulbrandsen, A.</span>, <span class="refAuthor">Vixie, P.</span>, and <span class="refAuthor">L. Esibov</span>, <span class="refTitle">"A DNS RR for specifying the location of services (DNS SRV)"</span>, <span class="seriesInfo">RFC 2782</span>, <span class="seriesInfo">DOI 10.17487/RFC2782</span>, <time datetime="2000-02" class="refDate">February 2000</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc2782">https://www.rfc-editor.org/info/rfc2782</a>&gt;</span>. </dd>
+<span class="refAuthor">Gulbrandsen, A.</span>, <span class="refTitle">"A DNS RR for specifying the location of services (DNS SRV)"</span>, <span class="seriesInfo">RFC 2782</span>, <time datetime="2000-02" class="refDate">February 2000</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2782">https://www.rfc-editor.org/rfc/rfc2782</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC8615">[RFC8615]</dt>
         <dd>
-<span class="refAuthor">Nottingham, M.</span>, <span class="refTitle">"Well-Known Uniform Resource Identifiers (URIs)"</span>, <span class="seriesInfo">RFC 8615</span>, <span class="seriesInfo">DOI 10.17487/RFC8615</span>, <time datetime="2019-05" class="refDate">May 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8615">https://www.rfc-editor.org/info/rfc8615</a>&gt;</span>. </dd>
+<span class="refAuthor">Nottingham, M.</span>, <span class="refTitle">"Well-Known Uniform Resource Identifiers (URIs)"</span>, <span class="seriesInfo">RFC 8615</span>, <time datetime="2019-05" class="refDate">May 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8615">https://www.rfc-editor.org/rfc/rfc8615</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC9460">[RFC9460]</dt>
       <dd>
-<span class="refAuthor">Schwartz, B.</span>, <span class="refAuthor">Bishop, M.</span>, and <span class="refAuthor">E. Nygren</span>, <span class="refTitle">"Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)"</span>, <span class="seriesInfo">RFC 9460</span>, <span class="seriesInfo">DOI 10.17487/RFC9460</span>, <time datetime="2023-11" class="refDate">November 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc9460">https://www.rfc-editor.org/info/rfc9460</a>&gt;</span>. </dd>
+<span class="refAuthor">Schwartz, B.</span>, <span class="refTitle">"Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)"</span>, <span class="seriesInfo">RFC 9460</span>, <time datetime="2023-11" class="refDate">November 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9460">https://www.rfc-editor.org/rfc/rfc9460</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 </dl>
 </section>
