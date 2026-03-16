@@ -94,10 +94,13 @@
       <section anchor="requirements-language">
         <name>Requirements Language</name>
         <t>
-          The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-          "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-          document are to be interpreted as described in BCP 14 <xref target="RFC2119"/>
-          <xref target="RFC8174"/> when, and only when, they appear in all capitals, as shown here.
+          The key words "<bcp14>MUST</bcp14>", "<bcp14>MUST NOT</bcp14>",
+          "<bcp14>REQUIRED</bcp14>", "<bcp14>SHALL</bcp14>", "<bcp14>SHALL NOT</bcp14>",
+          "<bcp14>SHOULD</bcp14>", "<bcp14>SHOULD NOT</bcp14>",
+          "<bcp14>RECOMMENDED</bcp14>", "<bcp14>NOT RECOMMENDED</bcp14>",
+          "<bcp14>MAY</bcp14>", and "<bcp14>OPTIONAL</bcp14>" in this document are to be
+          interpreted as described in BCP 14 <xref target="RFC2119"/> <xref target="RFC8174"/>
+          when, and only when, they appear in all capitals, as shown here.
         </t>
       </section>
       <section anchor="terms">
@@ -356,7 +359,7 @@ _agent._a2a.example.com. 300 IN TXT (
       </t>
       <ul>
         <li>Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform DNSSEC validation when DNSSEC-signed answers are available.</li>
-        <li>A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <xref target="RFC6125"/>.</li>
+        <li>A `remote` agent's `uri` MUST use `https://`. Clients MUST perform standard TLS certificate and hostname validation as described in <xref target="RFC9525"/>.</li>
         <li>When `pka` is present, clients MUST verify endpoint control of the private key as described in <xref target="pka-handshake"/>. Providers MUST publish `kid` when `pka` is present. Clients SHOULD warn if a previously observed `pka` disappears.</li>
         <li>Clients that support `proto=local` MUST implement the safeguards described below.</li>
         <li>Clients MUST NOT automatically follow cross-origin redirects from a discovered endpoint.</li>
@@ -582,53 +585,50 @@ _agent._a2a.example.com. 300 IN TXT (
 
   <back>
     <references>
-      <name>References</name>
-      <references>
-        <name>Normative References</name>
-        <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
-          <front><title>Key words for use in RFCs to Indicate Requirement Levels</title><author fullname="S. Bradner"/><date month="March" year="1997"/></front>
-          <seriesInfo name="RFC" value="2119"/>
-        </reference>
-        <reference anchor="RFC5890" target="https://www.rfc-editor.org/rfc/rfc5890">
-          <front><title>Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework</title><author fullname="J. Klensin"/><date month="August" year="2010"/></front>
-          <seriesInfo name="RFC" value="5890"/>
-        </reference>
-        <reference anchor="RFC6125" target="https://www.rfc-editor.org/rfc/rfc6125">
-          <front><title>Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)</title><author fullname="P. Saint-Andre"/><date month="March" year="2011"/></front>
-          <seriesInfo name="RFC" value="6125"/>
-        </reference>
-        <reference anchor="RFC6335" target="https://www.rfc-editor.org/rfc/rfc6335">
-          <front><title>Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry</title><author fullname="M. Cotton"/><date month="August" year="2011"/></front>
-          <seriesInfo name="RFC" value="6335"/>
-        </reference>
-        <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
-          <front><title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title><author fullname="B. Leiba"/><date month="May" year="2017"/></front>
-          <seriesInfo name="RFC" value="8174"/>
-        </reference>
-        <reference anchor="RFC8552" target="https://www.rfc-editor.org/rfc/rfc8552">
-          <front><title>Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves</title><author fullname="A. Sullivan"/><date month="March" year="2019"/></front>
-          <seriesInfo name="RFC" value="8552"/>
-        </reference>
-        <reference anchor="RFC9421" target="https://www.rfc-editor.org/rfc/rfc9421">
-          <front><title>HTTP Message Signatures</title><author fullname="R. Fielding"/><date month="November" year="2023"/></front>
-          <seriesInfo name="RFC" value="9421"/>
-        </reference>
-      </references>
-      <references>
-        <name>Informative References</name>
-        <reference anchor="RFC2782" target="https://www.rfc-editor.org/rfc/rfc2782">
-          <front><title>A DNS RR for specifying the location of services (DNS SRV)</title><author fullname="A. Gulbrandsen"/><date month="February" year="2000"/></front>
-          <seriesInfo name="RFC" value="2782"/>
-        </reference>
-        <reference anchor="RFC8615" target="https://www.rfc-editor.org/rfc/rfc8615">
-          <front><title>Well-Known Uniform Resource Identifiers (URIs)</title><author fullname="M. Nottingham"/><date month="May" year="2019"/></front>
-          <seriesInfo name="RFC" value="8615"/>
-        </reference>
-        <reference anchor="RFC9460" target="https://www.rfc-editor.org/rfc/rfc9460">
-          <front><title>Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)</title><author fullname="B. Schwartz"/><date month="November" year="2023"/></front>
-          <seriesInfo name="RFC" value="9460"/>
-        </reference>
-      </references>
+      <name>Normative References</name>
+      <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
+        <front><title>Key words for use in RFCs to Indicate Requirement Levels</title><author fullname="S. Bradner"/><date month="March" year="1997"/></front>
+        <seriesInfo name="RFC" value="2119"/>
+      </reference>
+      <reference anchor="RFC5890" target="https://www.rfc-editor.org/rfc/rfc5890">
+        <front><title>Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework</title><author fullname="J. Klensin"/><date month="August" year="2010"/></front>
+        <seriesInfo name="RFC" value="5890"/>
+      </reference>
+      <reference anchor="RFC9525" target="https://www.rfc-editor.org/rfc/rfc9525">
+        <front><title>Service Identity in TLS</title><author fullname="P. Saint-Andre"/><author fullname="R. Salz"/><date month="November" year="2023"/></front>
+        <seriesInfo name="RFC" value="9525"/>
+      </reference>
+      <reference anchor="RFC6335" target="https://www.rfc-editor.org/rfc/rfc6335">
+        <front><title>Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry</title><author fullname="M. Cotton"/><date month="August" year="2011"/></front>
+        <seriesInfo name="RFC" value="6335"/>
+      </reference>
+      <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
+        <front><title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title><author fullname="B. Leiba"/><date month="May" year="2017"/></front>
+        <seriesInfo name="RFC" value="8174"/>
+      </reference>
+      <reference anchor="RFC8552" target="https://www.rfc-editor.org/rfc/rfc8552">
+        <front><title>Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves</title><author fullname="A. Sullivan"/><date month="March" year="2019"/></front>
+        <seriesInfo name="RFC" value="8552"/>
+      </reference>
+      <reference anchor="RFC9421" target="https://www.rfc-editor.org/rfc/rfc9421">
+        <front><title>HTTP Message Signatures</title><author fullname="R. Fielding"/><date month="November" year="2023"/></front>
+        <seriesInfo name="RFC" value="9421"/>
+      </reference>
+    </references>
+    <references>
+      <name>Informative References</name>
+      <reference anchor="RFC2782" target="https://www.rfc-editor.org/rfc/rfc2782">
+        <front><title>A DNS RR for specifying the location of services (DNS SRV)</title><author fullname="A. Gulbrandsen"/><date month="February" year="2000"/></front>
+        <seriesInfo name="RFC" value="2782"/>
+      </reference>
+      <reference anchor="RFC8615" target="https://www.rfc-editor.org/rfc/rfc8615">
+        <front><title>Well-Known Uniform Resource Identifiers (URIs)</title><author fullname="M. Nottingham"/><date month="May" year="2019"/></front>
+        <seriesInfo name="RFC" value="8615"/>
+      </reference>
+      <reference anchor="RFC9460" target="https://www.rfc-editor.org/rfc/rfc9460">
+        <front><title>Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)</title><author fullname="B. Schwartz"/><date month="November" year="2023"/></front>
+        <seriesInfo name="RFC" value="9460"/>
+      </reference>
     </references>
 
     <section anchor="auth-registry">
