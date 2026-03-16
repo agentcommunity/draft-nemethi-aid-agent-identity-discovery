@@ -84,9 +84,8 @@ Table of Contents
            Node Names Registry
      9.2.  Registration in the Service Name and Transport Protocol
            Port Number Registry
-   10. References
-     10.1.  Normative References
-     10.2.  Informative References
+   10. Normative References
+   11. Informative References
    Appendix A.  Authentication Scheme Registry
    Appendix B.  Protocol Registry
    Appendix C.  Client Error Constants
@@ -380,7 +379,7 @@ Table of Contents
 
    *  A `remote` agent's `uri` MUST use `https://`. Clients MUST perform
       standard TLS certificate and hostname validation as described in
-      [RFC6125].
+      [RFC9525].
 
    *  When `pka` is present, clients MUST verify endpoint control of the
       private key as described in Appendix D.  Providers MUST publish
@@ -589,9 +588,7 @@ Table of Contents
 
                  Table 4: Requested RFC 6335 Registration
 
-10.  References
-
-10.1.  Normative References
+10.  Normative References
 
    [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", RFC 2119, March 1997,
@@ -601,13 +598,6 @@ Table of Contents
               Applications (IDNA): Definitions and Document Framework",
               RFC 5890, August 2010,
               <https://www.rfc-editor.org/rfc/rfc5890>.
-
-   [RFC6125]  Saint-Andre, P., "Representation and Verification of
-              Domain-Based Application Service Identity within Internet
-              Public Key Infrastructure Using X.509 (PKIX) Certificates
-              in the Context of Transport Layer Security (TLS)",
-              RFC 6125, March 2011,
-              <https://www.rfc-editor.org/rfc/rfc6125>.
 
    [RFC6335]  Cotton, M., "Internet Assigned Numbers Authority (IANA)
               Procedures for the Management of the Service Name and
@@ -626,7 +616,11 @@ Table of Contents
    [RFC9421]  Fielding, R., "HTTP Message Signatures", RFC 9421,
               November 2023, <https://www.rfc-editor.org/rfc/rfc9421>.
 
-10.2.  Informative References
+   [RFC9525]  Saint-Andre, P. and R. Salz, "Service Identity in TLS",
+              RFC 9525, November 2023,
+              <https://www.rfc-editor.org/rfc/rfc9525>.
+
+11.  Informative References
 
    [RFC2782]  Gulbrandsen, A., "A DNS RR for specifying the location of
               services (DNS SRV)", RFC 2782, February 2000,
