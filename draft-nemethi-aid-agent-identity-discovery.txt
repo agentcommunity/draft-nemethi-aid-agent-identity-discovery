@@ -4,8 +4,8 @@
 
 Internet Engineering Task Force                          B. Nemethi, Ed.
 Internet-Draft                                 Open Agent Registry, Inc.
-Intended status: Informational                              8 March 2026
-Expires: 9 September 2026
+Intended status: Informational                             16 March 2026
+Expires: 17 September 2026
 
 
                    Agent Identity and Discovery (AID)
@@ -41,7 +41,7 @@ Status of This Memo
    time.  It is inappropriate to use Internet-Drafts as reference
    material or to cite them other than as "work in progress."
 
-   This Internet-Draft will expire on 9 September 2026.
+   This Internet-Draft will expire on 17 September 2026.
 
 Copyright Notice
 
