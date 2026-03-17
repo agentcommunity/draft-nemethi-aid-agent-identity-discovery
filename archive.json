@@ -1,0 +1,90 @@
+{
+  "magic": "E!vIA5L86J2I",
+  "timestamp": "2026-03-17T02:38:08.046167+00:00",
+  "repo": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
+  "labels": [
+    {
+      "name": "bug",
+      "description": "Something isn't working",
+      "color": "d73a4a"
+    },
+    {
+      "name": "documentation",
+      "description": "Improvements or additions to documentation",
+      "color": "0075ca"
+    },
+    {
+      "name": "duplicate",
+      "description": "This issue or pull request already exists",
+      "color": "cfd3d7"
+    },
+    {
+      "name": "enhancement",
+      "description": "New feature or request",
+      "color": "a2eeef"
+    },
+    {
+      "name": "good first issue",
+      "description": "Good for newcomers",
+      "color": "7057ff"
+    },
+    {
+      "name": "help wanted",
+      "description": "Extra attention is needed",
+      "color": "008672"
+    },
+    {
+      "name": "invalid",
+      "description": "This doesn't seem right",
+      "color": "e4e669"
+    },
+    {
+      "name": "question",
+      "description": "Further information is requested",
+      "color": "d876e3"
+    },
+    {
+      "name": "wontfix",
+      "description": "This will not be worked on",
+      "color": "ffffff"
+    },
+    {
+      "name": "codex",
+      "description": null,
+      "color": "ededed"
+    }
+  ],
+  "issues": [],
+  "pulls": [
+    {
+      "number": 1,
+      "id": "PR_kwDORjD4g87JVco9",
+      "title": "Align draft XML with canonical AID spec and regenerate outputs",
+      "url": "https://github.com/agentcommunity/draft-nemethi-aid-agent-identity-discovery/pull/1",
+      "state": "MERGED",
+      "author": "nembal",
+      "authorAssociation": "CONTRIBUTOR",
+      "assignees": [],
+      "labels": [
+        "codex"
+      ],
+      "body": "### Motivation\n- Ensure the normative statements in `draft-nemethi-aid-agent-identity-discovery.xml` exactly match the canonical AID specification wording for implementation-critical behavior. \n- Make the repo build reproducibly generate the derived `.html` and `.txt` outputs in this environment.\n\n### Description\n- Restored and clarified normative parsing and record syntax: the TXT payload is a single semicolon-delimited string and clients should apply `trim()` semantics for keys/values. \n- Made discovery parsing normative details explicit: key comparison is `case-insensitive` and clients `MUST` recognize single-letter aliases for all defined keys. \n- Tightened PKA security wording to require providers to publish `kid` when `pka` is present and preserved the client `SHOULD` downgrade-warning guidance. \n- Inlined external RFC reference entries in the XML to avoid remote `xi:include` fetch failures and allow `xml2rfc` generation in this environment. \n- Files changed: `draft-nemethi-aid-agent-identity-discovery.xml` (derived `.html` and `.txt` were regenerated locally by the build but not committed).\n\n### Testing\n- Ran `make` which initially failed due to inability to fetch `https://bib.ietf.org/...` includes (network/proxy 403), and after inlining references re-ran `make` which succeeded in generating `draft-nemethi-aid-agent-identity-discovery.html` and `draft-nemethi-aid-agent-identity-discovery.txt`. \n- Ran `make lint` which completed successfully. \n- Commands executed (automated): `curl -fsSL https://raw.githubusercontent.com/agentcommunity/agent-identity-discovery/main/packages/docs/specification.md -o /tmp/specification.md`, `rg` checks against the XML, `make`, `make lint`, `git add` and `git commit`.\n\n------\n[Codex Task](https://chatgpt.com/codex/tasks/task_e_69afe7619aec8321ada51d0eff1027d4)",
+      "createdAt": "2026-03-10T10:08:34Z",
+      "updatedAt": "2026-03-10T12:23:26Z",
+      "baseRepository": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
+      "baseRefName": "main",
+      "baseRefOid": "d2d12a5a20a7dc2ace7e45fe7e455d22048f637a",
+      "headRepository": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
+      "headRefName": "codex/align-xml-draft-with-aid-specification",
+      "headRefOid": "52ea4d59fe5cc5680f0ff5e8a43e796f1aa529d6",
+      "closedAt": "2026-03-10T12:23:23Z",
+      "mergedAt": "2026-03-10T12:23:23Z",
+      "mergedBy": "nembal",
+      "mergeCommit": {
+        "oid": "69dee6b8020d73ed48d9b7309783129d6d5e8011"
+      },
+      "comments": [],
+      "reviews": []
+    }
+  ]
+}
