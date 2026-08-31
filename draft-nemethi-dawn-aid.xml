@@ -1,0 +1,1298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Internet-Draft source for AID.
+  Aligned to the current RFCXML v3 template model and the AID v2.0.0 specification.
+-->
+<?xml-model href="rfc7991bis.rnc"?>
+
+<!DOCTYPE rfc [
+  <!ENTITY nbsp "&#160;">
+  <!ENTITY zwsp "&#8203;">
+  <!ENTITY nbhy "&#8209;">
+  <!ENTITY wj "&#8288;">
+]>
+
+<rfc
+  xmlns:xi="http://www.w3.org/2001/XInclude"
+  category="info"
+  docName="draft-nemethi-dawn-aid-latest"
+  ipr="trust200902"
+  submissionType="IETF"
+  sortRefs="true"
+  symRefs="true"
+  tocDepth="3"
+  tocInclude="true"
+  version="3"
+  xml:lang="en">
+  <front>
+    <title abbrev="AID">Agent Identity and Discovery (AID)</title>
+    <seriesInfo name="Internet-Draft" value="draft-nemethi-dawn-aid-latest"/>
+
+    <author fullname="Balazs Nemethi" initials="B." surname="Nemethi" role="editor">
+      <organization>Open Agent Registry, Inc.</organization>
+      <address>
+        <email>balazs@agentcommunity.org</email>
+        <uri>https://agentcommunity.org</uri>
+      </address>
+    </author>
+
+    <date/>
+    <area>General</area>
+    <keyword>AID</keyword>
+    <keyword>agent discovery</keyword>
+    <keyword>DNS</keyword>
+    <keyword>service discovery</keyword>
+    <keyword>DAWN</keyword>
+
+    <abstract>
+      <t>
+        Agent Identity and Discovery (AID) answers one question: given a domain, where is the
+        agent and which protocol should a client speak? An AID client queries a DNS TXT record at
+        the well-known subdomain _agent.&lt;domain&gt; and learns the service endpoint URI,
+        protocol token, authentication hint, and optional metadata for that agent.
+      </t>
+      <t>
+        This document defines the AID v2 (`aid2`) record format, client discovery algorithm,
+        exact-host lookup rules, endpoint-proof (PKA) handshake using Ed25519 HTTP Message
+        Signatures, security requirements, and IANA registrations for the `_agent` DNS node name
+        and the `agent` service name. The legacy `aid1` record format is retained as a
+        compatibility format for clients migrating from earlier deployments. AID is intentionally
+        small; after discovery, protocol-specific mechanisms such as MCP or A2A handle
+        communication and capability negotiation.
+      </t>
+    </abstract>
+  </front>
+
+  <middle>
+    <section anchor="introduction">
+      <name>Introduction</name>
+      <t>
+        Applications that need to locate and connect to an agent often rely on out-of-band
+        configuration, centralized directories, or protocol-specific discovery mechanisms. AID
+        defines a single DNS-based bootstrap point that answers one question: given a domain,
+        where is the agent and which protocol should a client speak?
+      </t>
+      <t>
+        AID uses a TXT record at the well-known DNS name _agent.&lt;domain&gt;. The record is
+        small, versioned, and protocol-agnostic. It tells a client where the agent is located,
+        which protocol token applies, what authentication hint to expect, and whether endpoint
+        proof is available.
+      </t>
+      <ul>
+        <li>Zero configuration: a user supplies a domain and the client performs discovery.</li>
+        <li>Decentralized deployment: the protocol uses standard DNS publication.</li>
+        <li>Protocol-agnostic bootstrap: AID identifies the next protocol, rather than replacing it.</li>
+        <li>Stable evolution path: the `_agent` label remains stable across record versions.</li>
+        <li>Endpoint proof: when a public key is published, the endpoint can prove control of the
+        matching private key using RFC 9421 HTTP Message Signatures, optionally bound to the
+        queried domain.</li>
+      </ul>
+      <t>
+        This revision updates the specification from the AID v1.2 record format described in
+        <xref target="RFC-NEMETHI-AID-00"/> to the AID v2.0.0 wire format: the `aid2` record uses
+        an unpadded base64url Ed25519 JWK `x` value for the endpoint-proof key and an RFC 7638 JWK
+        thumbprint as the HTTP Message Signature `keyid`, removing the `kid`/`i` rotation alias
+        used by `aid1`. It also defines an optional domain-binding extension to the endpoint-proof
+        handshake that lets an endpoint signal consent to serve as the agent for the queried
+        domain. The legacy `aid1` format remains valid during a compatibility window.
+      </t>
+      <t>
+        This document requests two IANA registrations. The RFC 8552 registration covers the
+        deployed TXT-based discovery label `_agent`, while the RFC 6335 service-name-only
+        registration reserves `agent` for possible future SRV-based discovery under the same
+        naming family. Both registrations apply to the `_agent` label across `aid1` and `aid2`;
+        the record-version field, not the DNS node name, distinguishes wire-format revisions.
+      </t>
+      <t>
+        AID has been deployed since mid-2025 with client and server SDKs across six languages.
+        This document is an individual contribution, submitted for consideration alongside other
+        agent-discovery proposals under discussion in the IETF DAWN effort.
+      </t>
+    </section>
+
+    <section anchor="conventions">
+      <name>Conventions and Terminology</name>
+      <section anchor="requirements-language">
+        <name>Requirements Language</name>
+        <t>
+          The key words "<bcp14>MUST</bcp14>", "<bcp14>MUST NOT</bcp14>",
+          "<bcp14>REQUIRED</bcp14>", "<bcp14>SHALL</bcp14>", "<bcp14>SHALL NOT</bcp14>",
+          "<bcp14>SHOULD</bcp14>", "<bcp14>SHOULD NOT</bcp14>",
+          "<bcp14>RECOMMENDED</bcp14>", "<bcp14>NOT RECOMMENDED</bcp14>",
+          "<bcp14>MAY</bcp14>", and "<bcp14>OPTIONAL</bcp14>" in this document are to be
+          interpreted as described in BCP 14 <xref target="RFC2119"/> <xref target="RFC8174"/>
+          when, and only when, they appear in all capitals, as shown here.
+        </t>
+      </section>
+      <section anchor="terms">
+        <name>Terms</name>
+        <dl newline="true">
+          <dt>AID Client</dt>
+          <dd>Software that performs AID discovery for a domain.</dd>
+          <dt>Provider</dt>
+          <dd>The entity that controls a domain and publishes the AID TXT record.</dd>
+          <dt>_agent subdomain</dt>
+          <dd>The DNS name `_agent.&lt;domain&gt;` where the canonical AID TXT record is published.</dd>
+          <dt>A-label</dt>
+          <dd>The Punycode representation of an Internationalized Domain Name as described in <xref target="RFC5890"/>.</dd>
+          <dt>PKA</dt>
+          <dd>Public Key for Agent: the optional Ed25519 endpoint-proof key carried in the AID record.</dd>
+          <dt>JWK `x`</dt>
+          <dd>The base64url-encoded public key member of an Ed25519 OKP JWK, as described in <xref target="RFC8037"/>.</dd>
+          <dt>JWK thumbprint</dt>
+          <dd>The RFC 7638 <xref target="RFC7638"/> hash of a canonical JWK representation, used as the v2 HTTP Message Signature `keyid`.</dd>
+          <dt>Trust source</dt>
+          <dd>The source from which the selected AID record was obtained: `dns` or `well-known-tls`.</dd>
+        </dl>
+      </section>
+    </section>
+
+    <section anchor="record-format">
+      <name>AID Record Format</name>
+      <t>
+        A provider MUST advertise its agent service by publishing a single TXT record at
+        `_agent.&lt;domain&gt;`. Providers MUST use DNS TXT records for discovery. TXT is the
+        deployed discovery record type because it is widely available across DNS providers and
+        registrars. Future versions of AID may adopt a more structured record type, but the
+        `_agent` label remains stable; see <xref target="label-strategy"/>.
+      </t>
+
+      <section anchor="syntax-and-parsing">
+        <name>Syntax and Parsing</name>
+        <t>
+          The record MUST be a single semicolon-delimited string of `key=value` pairs. Clients
+          SHOULD trim leading and trailing whitespace from keys and values. Clients MUST ignore
+          unknown keys unless the key has a known legacy meaning that this specification
+          explicitly rejects for `aid2`.
+        </t>
+        <t>
+          If a DNS server splits the TXT record into multiple 255-octet character strings, the
+          client MUST concatenate them in order before parsing. Providers SHOULD keep total
+          payload size below 255 bytes when possible.
+        </t>
+        <t>
+          Key comparison is case-insensitive. Clients MUST recognize the single-letter lowercase
+          alias for every defined key. A record MUST NOT include both a full key and its alias.
+          Providers SHOULD emit the short-key form for compact DNS deployment.
+        </t>
+      </section>
+
+      <section anchor="defined-keys">
+        <name>Defined Keys</name>
+        <dl newline="true">
+          <dt>version (`v`) Required</dt>
+          <dd>Specification version. For AID v2 this MUST be `aid2`. Example: `v=aid2`.</dd>
+          <dt>uri (`u`) Required</dt>
+          <dd>Absolute `https://` URL for a remote agent, `wss://` for WebSocket, or a local locator. Example: `u=https://api.example.com/mcp`.</dd>
+          <dt>proto (`p`) Required</dt>
+          <dd>Protocol token from <xref target="proto-registry"/>. Example: `p=mcp`.</dd>
+          <dt>auth (`a`) Recommended</dt>
+          <dd>Authentication hint token from <xref target="auth-registry"/>. Example: `a=oauth2_code`.</dd>
+          <dt>desc (`s`) Optional</dt>
+          <dd>Short human-readable description, up to 60 UTF-8 bytes. Example: `s=Primary AI Gateway`.</dd>
+          <dt>docs (`d`) Optional</dt>
+          <dd>Absolute `https://` URL for human-readable documentation. Example: `d=https://docs.example.com/agent`.</dd>
+          <dt>dep (`e`) Optional</dt>
+          <dd>ISO 8601 UTC timestamp indicating deprecation. Example: `e=2027-01-01T00:00:00Z`.</dd>
+          <dt>pka (`k`) Optional</dt>
+          <dd>Unpadded base64url Ed25519 public key. The value is exactly the RFC 8037 <xref target="RFC8037"/> JWK `x` member. Example: `k=JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs`.</dd>
+        </dl>
+        <t>
+          AID v2 records MUST NOT use `kid` or `i` for endpoint proof. A `v=aid2` record
+          containing `kid` or `i` is invalid.
+        </t>
+      </section>
+
+      <section anchor="examples">
+        <name>Examples</name>
+
+        <figure anchor="example-remote-mcp">
+          <name>Remote MCP Agent</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.example.com. 300 IN TXT (
+  "v=aid2;u=https://api.example.com/mcp;"
+  "p=mcp;a=pat;s=Example AI Tools"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <figure anchor="example-pka">
+          <name>Remote MCP with PKA</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://api.example.com/mcp;"
+  "k=JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs;"
+  "a=oauth2_code;s=Secure AI Gateway"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <figure anchor="example-websocket">
+          <name>WebSocket Agent</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=websocket;u=wss://agent.example.com/session;"
+  "a=oauth2_code;s=Streaming Agent"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <figure anchor="example-local-agent">
+          <name>Local Agent via Docker</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.grafana.com. 300 IN TXT (
+  "v=aid2;u=docker:grafana/mcp:latest;"
+  "p=local;a=pat;s=Run Grafana agent locally"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <figure anchor="example-legacy-migration">
+          <name>Legacy Compatibility During Migration</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.example.com. 300 IN TXT (
+  "v=aid1;p=mcp;u=https://api.example.com/mcp;"
+  "k=<legacy-v1-multibase-key>;i=g1"
+)
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://api.example.com/mcp;"
+  "k=<same-key-as-v2-base64url>"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <t>
+          Clients that support both versions partition records by version before ambiguity
+          checks. A same-key migration from legacy `aid1` to current `aid2` is not a key rotation
+          when the decoded Ed25519 public key bytes are the same.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="discovery-procedure">
+      <name>Client Discovery Procedure</name>
+
+      <section anchor="algorithm">
+        <name>Discovery Algorithm</name>
+        <t>
+          When an AID client is given a domain, it MUST perform the following steps:
+        </t>
+        <ol>
+          <li>Normalize the domain. If the input contains non-ASCII labels, convert them to
+          A-label form as described in <xref target="RFC5890"/>.</li>
+          <li>Query the TXT record at `_agent.&lt;exact-host-user-entered&gt;`. The client MUST
+          NOT walk up the DNS hierarchy.</li>
+          <li>Parse the TXT answer set as semicolon-delimited `key=value` records. Key comparison
+          MUST be case-insensitive, and clients MUST recognize single-letter aliases for all
+          defined keys.</li>
+          <li>Validate records using versioned rules. For `aid2`, require `v`, `u`, and `p`;
+          reject a record containing both a full key and its alias; reject `kid` or `i`; and
+          reject malformed `k` values.</li>
+          <li>Partition valid records by AID major version.</li>
+          <li>Select the highest supported valid version allowed by local policy. Clients that
+          support `aid2` SHOULD prefer `aid2` over `aid1`. Within the selected version, if exactly
+          one valid record exists, use it. If more than one valid record exists, the client MUST
+          fail due to ambiguity; clients MUST NOT choose among multiple valid same-version records
+          by DNS answer order.</li>
+          <li>If `docs` is present, the client MAY display it. If `dep` is in the future, the
+          client SHOULD warn. If `dep` is in the past, the client SHOULD fail gracefully.</li>
+          <li>If `k` is present, the client MUST perform the endpoint-proof procedure in
+          <xref target="pka-handshake"/>.</li>
+          <li>For `aid2` records, clients SHOULD request domain binding by sending the
+          `AID-Domain` header (the A-label, lowercased, portless queried host from step 1) as
+          described in <xref target="pka-domain-binding"/>, unless local policy disables it
+          (<xref target="enterprise-policy"/>, `domain-binding=off`).</li>
+          <li>Return the discovered endpoint, protocol, metadata, PKA state (including the
+          domain-binding indicator when domain binding was requested), and trust source.</li>
+        </ol>
+        <t>
+          Malformed answers do not matter when there is exactly one valid record in the selected
+          version. Returning clients that previously selected `aid2` SHOULD treat an `aid1`-only
+          result as a version downgrade.
+        </t>
+        <t>
+          If no DNS record is found or the DNS lookup fails, the client MAY attempt the
+          `.well-known` fallback on the same exact host; see <xref target="well-known-fallback"/>.
+          If both DNS and fallback fail, discovery fails.
+        </t>
+      </section>
+
+      <section anchor="error-codes">
+        <name>Standard Client Error Codes</name>
+        <t>
+          Client implementations SHOULD use these codes to report specific failure modes.
+        </t>
+        <table anchor="aid-client-errors-table">
+          <name>Client Error Codes</name>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1000</td>
+              <td>ERR_NO_RECORD</td>
+              <td>No AID DNS record was found for the domain.</td>
+            </tr>
+            <tr>
+              <td>1001</td>
+              <td>ERR_INVALID_TXT</td>
+              <td>A record was found but is malformed, invalid, or ambiguous.</td>
+            </tr>
+            <tr>
+              <td>1002</td>
+              <td>ERR_UNSUPPORTED_PROTO</td>
+              <td>The record is valid, but the client does not support the selected protocol.</td>
+            </tr>
+            <tr>
+              <td>1003</td>
+              <td>ERR_SECURITY</td>
+              <td>Discovery failed due to a security policy or failed endpoint proof.</td>
+            </tr>
+            <tr>
+              <td>1004</td>
+              <td>ERR_DNS_LOOKUP_FAILED</td>
+              <td>The DNS query failed for a network-related reason.</td>
+            </tr>
+            <tr>
+              <td>1005</td>
+              <td>ERR_FALLBACK_FAILED</td>
+              <td>The `.well-known` fallback failed or returned invalid data.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="exact-host">
+        <name>Exact-Host Semantics and Explicit Delegation</name>
+        <t>
+          Discovery is exact-host by default. If the application asks for `app.team.example.com`,
+          the canonical AID query name is `_agent.app.team.example.com`.
+        </t>
+        <t>
+          Clients MUST NOT walk up the DNS hierarchy looking for `_agent.team.example.com` or
+          `_agent.example.com`. If an operator wants a child host to inherit a shared record, that
+          inheritance MUST be expressed in DNS for the exact queried name, for example by using a
+          `CNAME` at the child host's `_agent` label.
+        </t>
+
+        <figure anchor="example-exact-host">
+          <name>Exact-Host and Delegated Examples</name>
+          <sourcecode type="dns"><![CDATA[
+_agent.app.team.example.com. 300 IN CNAME (
+  _agent.shared.team.example.com.
+)
+_agent.shared.team.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://gateway.team.example.com/mcp;"
+  "k=<current-key>"
+)
+          ]]></sourcecode>
+        </figure>
+
+        <t>
+          The canonical v2 location is the base record `_agent.&lt;domain&gt;`. Providers MAY
+          additionally publish protocol-specific names such as `_agent._mcp.&lt;domain&gt;` or
+          `_agent._a2a.&lt;domain&gt;` for legacy clients, diagnostics, or explicitly configured
+          base-failure probing. Protocol-specific names, when used, always use the underscore form
+          `_agent._&lt;proto&gt;.&lt;domain&gt;`; clients MUST NOT perform a compatibility lookup
+          at `_agent.&lt;proto&gt;.&lt;domain&gt;`.
+        </t>
+        <t>
+          When an application explicitly requests a protocol, v2 clients still query the
+          canonical base name `_agent.&lt;exact-host-user-entered&gt;` first and filter that
+          record for the requested protocol. Protocol-prefixed probing is legacy, diagnostic, or
+          base-failure-only behavior where supported and explicitly configured. Clients MUST NOT
+          query parent hosts implicitly in either lookup form.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="security">
+      <name>Security Considerations</name>
+      <t>
+        AID publishes public discovery metadata. The TXT record MUST NOT contain secrets. The
+        protocol depends on DNS integrity, TLS for remote endpoints, and explicit client
+        safeguards for local execution.
+      </t>
+      <ul>
+        <li>Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform
+        DNSSEC validation when DNSSEC-signed answers are available.</li>
+        <li>A remote agent's `uri` MUST use `https://`, except `proto=websocket` which MUST use
+        `wss://`. Clients MUST perform standard TLS certificate and hostname validation as
+        described in <xref target="RFC9525"/>.</li>
+        <li>When `k` is present, clients MUST verify endpoint proof as described in
+        <xref target="pka-handshake"/>.</li>
+        <li>Clients that support `proto=local` MUST implement the safeguards described below.</li>
+        <li>Clients MUST NOT automatically follow cross-origin redirects from a discovered
+        endpoint without policy approval or user confirmation.</li>
+      </ul>
+      <t>
+        Clients that support `proto=local` MUST implement the following safeguards:
+      </t>
+      <ol>
+        <li>Explicit consent: before first execution, the client MUST display the full resolved
+        command and require explicit confirmation.</li>
+        <li>Integrity check: the client MUST compute and cache a cryptographic fingerprint of the
+        `uri` and `proto` values. If these values change on a later lookup, the client MUST
+        re-trigger the full consent process.</li>
+        <li>No shell interpretation: arguments derived from the `uri` MUST be passed atomically to
+        the underlying OS execution call to prevent command injection.</li>
+        <li>No nested discovery: the client MUST reject a `local` execution `uri` that could be
+        interpreted as a command that initiates another AID discovery request.</li>
+        <li>Sandboxing: clients SHOULD run local agents in a sandboxed environment with minimum
+        necessary permissions.</li>
+      </ol>
+      <t>
+        If an initial request to the discovered `uri` returns an HTTP redirect (`301`, `302`,
+        `307`, or `308`) to a different origin, clients SHOULD treat this as a potential security
+        risk. Clients MUST NOT follow such cross-origin redirects automatically. Implementations
+        MAY either terminate with `ERR_SECURITY` or require explicit user confirmation before
+        proceeding. Clients MUST NOT follow redirects during PKA verification or `.well-known`
+        fallback.
+      </t>
+
+      <section anchor="what-pka-proves">
+        <name>What PKA Proves</name>
+        <t>
+          PKA proves exactly this: the endpoint reached at the discovered URI controls the
+          Ed25519 private key corresponding to the public key currently published in the domain's
+          selected AID record.
+        </t>
+        <t>
+          PKA does not prove: that a user authorized a specific action; that an OAuth token is
+          valid; that a workload identity credential belongs to a trust domain; that an internal
+          policy engine approved a request; that a key change is cryptographically continuous with
+          a previous key; or that the endpoint consents to serve as the agent for the queried
+          domain.
+        </t>
+        <t>
+          Because the response signature binds only the endpoint's own request context, any
+          domain can publish a record containing another operator's endpoint URI and public key,
+          and the endpoint proof still verifies. This unauthorized-association gap does not let
+          the publishing domain impersonate the endpoint, but it falsely implies a relationship
+          between the domain and the endpoint. Clients that need the endpoint's consent to the
+          association use the domain-binding profile in <xref target="pka-domain-binding"/>; v2
+          clients SHOULD request this by default.
+        </t>
+      </section>
+
+      <section anchor="threat-model">
+        <name>Threat Model</name>
+        <t>
+          AID's security model addresses the following threat landscape.
+        </t>
+        <t>Assumptions:</t>
+        <ul>
+          <li>DNS resolvers are trusted for transport unless a client requires DNSSEC.</li>
+          <li>HTTPS endpoints are verified through standard TLS certificate validation.</li>
+          <li>The TXT record is public data; no secrets are transmitted through DNS.</li>
+        </ul>
+        <t>Mitigations provided:</t>
+        <ul>
+          <li>DNS spoofing or cache poisoning: DNSSEC validation, when available.</li>
+          <li>Endpoint impersonation: PKA endpoint proof with Ed25519 HTTP Message Signatures.</li>
+          <li>Unauthorized association: the domain-binding profile
+          (<xref target="pka-domain-binding"/>), which v2 clients SHOULD request by default. This
+          mitigation applies only when a client requires domain binding; merely requesting it does
+          not stop an attacker-controlled endpoint from returning a valid unbound proof.</li>
+          <li>PKA removal or key replacement: returning clients can detect changes when they
+          retain previous security state.</li>
+          <li>Version downgrade: returning clients can detect `aid2` to `aid1` downgrade when they
+          retain previous version state.</li>
+          <li>Command injection in local agents: local execution safeguards.</li>
+          <li>Cross-origin redirects: PKA redirects are rejected, and cross-origin protocol
+          redirects are not automatic.</li>
+        </ul>
+        <t>Explicitly out of scope:</t>
+        <ul>
+          <li>Compromised authoritative DNS servers beyond DNSSEC.</li>
+          <li>Active attackers after TLS validation fails.</li>
+          <li>Authorization, delegation, user consent, reputation, or workload federation.</li>
+          <li>Managed cryptographic rotation in the core DNS record.</li>
+        </ul>
+      </section>
+
+      <section anchor="enterprise-policy">
+        <name>Enterprise Policy Modes</name>
+        <t>
+          Clients that expose enterprise controls SHOULD provide policy presets and MAY expose the
+          underlying policy knobs directly.
+        </t>
+        <table anchor="aid-policy-presets-table">
+          <name>Normative Policy Presets</name>
+          <thead>
+            <tr>
+              <th>Preset</th>
+              <th>PKA</th>
+              <th>DNSSEC</th>
+              <th>Well-known</th>
+              <th>Downgrade</th>
+              <th>Domain binding</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>balanced</td>
+              <td>if-present</td>
+              <td>prefer</td>
+              <td>auto</td>
+              <td>warn</td>
+              <td>prefer</td>
+            </tr>
+            <tr>
+              <td>strict</td>
+              <td>require</td>
+              <td>require</td>
+              <td>disable</td>
+              <td>fail</td>
+              <td>require</td>
+            </tr>
+          </tbody>
+        </table>
+        <t>
+          The underlying policy knobs are:
+        </t>
+        <ul>
+          <li>PKA policy: `if-present | require`</li>
+          <li>DNSSEC policy: `off | prefer | require`</li>
+          <li>Well-known policy: `auto | disable`</li>
+          <li>Downgrade policy: `off | warn | fail`</li>
+          <li>Domain-binding policy: `off | prefer | require`</li>
+        </ul>
+        <t>
+          Policy semantics are as follows:
+        </t>
+        <ul>
+          <li>PKA `require`: discovery MUST fail with `ERR_SECURITY` if the selected record does
+          not publish `k`.</li>
+          <li>DNSSEC `prefer`: clients SHOULD continue when DNSSEC cannot be validated, but SHOULD
+          surface a warning.</li>
+          <li>DNSSEC `require`: clients MUST fail with `ERR_SECURITY` when DNSSEC validation is
+          unavailable or unsuccessful for the selected DNS answer.</li>
+          <li>Well-known `disable`: clients MUST NOT use `/.well-known/agent` fallback.</li>
+          <li>Downgrade `warn`: if a previously seen `k` disappears or changes, clients SHOULD
+          surface a warning. This also applies to an `aid2` to `aid1` downgrade.</li>
+          <li>Downgrade `fail`: if a previously seen `k` disappears or changes, clients MUST fail
+          with `ERR_SECURITY`. This also applies to an `aid2` to `aid1` downgrade.</li>
+          <li>Domain-binding `off`: the client does not send `AID-Domain` on PKA requests.</li>
+          <li>Domain-binding `prefer` (default): the client sends `AID-Domain`. A domain-bound
+          proof (one whose covered set includes `"aid-domain";req`) is recorded as such; an
+          unbound proof is still accepted. `prefer` records the outcome but does not enforce
+          it.</li>
+          <li>Domain-binding `require`: when an endpoint proof is performed for a record
+          containing `k`, discovery fails unless the proof is domain-bound. This is the only mode
+          that mitigates unauthorized association (<xref target="what-pka-proves"/>,
+          <xref target="pka-domain-binding"/>); merely sending `AID-Domain` does not. Has no
+          effect when no `k` is present or PKA yields no proof. `pka=require` and
+          `domain-binding=require` compose: `pka=require` fails first when `k` is absent, then
+          `domain-binding=require` enforces binding on the resulting proof.</li>
+        </ul>
+        <t>
+          When a record is discovered through the `.well-known` fallback
+          (`trustSource=well-known-tls`; see <xref target="well-known-fallback"/>), the queried
+          host and the TLS-validated host are the same origin, so an `AID-Domain` binding there is
+          largely redundant with TLS host validation. Clients still send `AID-Domain` and
+          `domain-binding=require` still enforces, but the binding adds little beyond TLS in that
+          path.
+        </t>
+        <t>
+          If discovery succeeds only through `.well-known`, the result cannot satisfy
+          `dnssec=require`.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="dns-caching">
+      <name>DNS and Caching</name>
+      <t>
+        Providers are RECOMMENDED to publish `_agent` TXT records with a TTL between 300 and 900
+        seconds. Clients MUST respect the received TTL and MUST NOT cache the record longer than
+        that.
+      </t>
+      <t>
+        PKA responses are separate from DNS records. A nonce-bound PKA response MUST include
+        `Cache-Control: no-store`. Clients SHOULD also send `Cache-Control: no-store` on PKA
+        requests.
+      </t>
+    </section>
+
+    <section anchor="rotation-stance">
+      <name>Rotation Stance</name>
+      <t>
+        AID v2 core does not define DNS-level cryptographic key rotation. The core record says,
+        for example:
+      </t>
+      <sourcecode type="dns"><![CDATA[
+_agent.acme.com TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=<current-key>"
+)
+      ]]></sourcecode>
+      <t>That means:</t>
+      <ul>
+        <li>DNS currently publishes this endpoint and this key.</li>
+        <li>The endpoint can prove possession of the corresponding private key.</li>
+        <li>Verifiers can derive stable key identity from `k`.</li>
+      </ul>
+      <t>It does not mean:</t>
+      <ul>
+        <li>The new key is authorized by the old key.</li>
+        <li>Multiple keys are active through DNS.</li>
+        <li>DNS provides validity windows.</li>
+        <li>AID core provides request provenance or delegated signing infrastructure.</li>
+      </ul>
+      <t>
+        If the key changes, the key changed. Clients with previous state decide whether to warn,
+        fail, or accept according to local policy (<xref target="enterprise-policy"/>).
+      </t>
+
+      <section anchor="no-multi-key-rrset">
+        <name>Why No Multi-Key RRset in Core</name>
+        <t>
+          A shape such as the following is not valid in v2 core:
+        </t>
+        <sourcecode type="dns"><![CDATA[
+_agent.acme.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=<old-key>"
+)
+_agent.acme.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=<new-key>"
+)
+        ]]></sourcecode>
+        <t>
+          It changes the model from a domain resolving to one selected endpoint record with an
+          optional proof key, to a domain resolving to one selected endpoint descriptor with an
+          active key set from which a response `keyid` selects a key. That requires rules for
+          normalized non-key field equivalence, duplicate handling, partial DNS propagation,
+          key-set pinning, downgrade policy, SDK return types, and conformance fixtures. It also
+          does not solve lost-key or compromised-key recovery.
+        </t>
+      </section>
+
+      <section anchor="future-rotation-profile">
+        <name>Future Rotation Profile</name>
+        <t>
+          If AID later needs managed rotation for pinned clients or provenance profiles, that
+          should be a separate HTTP key-directory profile, for example one using JWKS-style key
+          overlap:
+        </t>
+        <sourcecode type="json"><![CDATA[
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "kid": "<jwk-thumbprint>",
+      "x": "<public-key>",
+      "use": "sig",
+      "nbf": 1712793600,
+      "exp": 1715385600
+    }
+  ]
+}
+        ]]></sourcecode>
+        <t>
+          If such a directory chains to DNS `k`, that chaining is the defining property of an
+          AID-anchored key directory. If it does not chain to DNS `k`, it is a normal external key
+          directory outside AID core.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="label-strategy">
+      <name>Label Strategy</name>
+      <t>
+        AID v2 keeps `_agent.&lt;domain&gt;` as the discovery label for compatibility with
+        existing deployments. The stable DNS label for AID is `_agent`. Record formats may evolve,
+        but the discovery label remains `_agent` across versions, and the record version field
+        identifies the wire-format expectations. This is the main reason the RFC 8552
+        registration is valuable even if a later AID version uses a different DNS RR type.
+      </t>
+      <t>
+        Label governance beyond the v2 key-format and endpoint-proof updates defined in this
+        document may be addressed by a future working group process.
+      </t>
+    </section>
+
+    <section anchor="registries-governance">
+      <name>Registries and Governance</name>
+      <t>
+        To support interoperability, token registries and community resources are maintained
+        publicly. The auth and protocol registries remain compatible with legacy `aid1` records
+        unless changed through the normal extension process.
+      </t>
+      <ul>
+        <li>Token registries: the canonical lists for `auth` and `proto` tokens are maintained at
+        <eref target="https://github.com/agentcommunity/aid-tokens">https://github.com/agentcommunity/aid-tokens</eref>.
+        Additions require a pull request and are governed by a first-come, first-served policy
+        with expert review.</li>
+        <li>Global index: an open DNS crawler and community dashboard showing AID adoption is
+        maintained at
+        <eref target="https://github.com/agentcommunity/aid-registry">https://github.com/agentcommunity/aid-registry</eref>.</li>
+      </ul>
+
+      <section anchor="auth-registry">
+        <name>Auth Tokens</name>
+        <t>All authentication tokens are case-sensitive and use lowercase ASCII.</t>
+        <ul>
+          <li>none</li>
+          <li>pat</li>
+          <li>apikey</li>
+          <li>basic</li>
+          <li>oauth2_device</li>
+          <li>oauth2_code</li>
+          <li>mtls</li>
+          <li>custom</li>
+        </ul>
+      </section>
+
+      <section anchor="proto-registry">
+        <name>Protocol Tokens</name>
+        <t>All protocol tokens are case-sensitive and use lowercase ASCII.</t>
+        <table anchor="aid-proto-registry-table">
+          <name>Protocol Tokens</name>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Meaning</th>
+              <th>Allowed `uri` scheme(s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>mcp</td>
+              <td>Model Context Protocol</td>
+              <td>https://</td>
+            </tr>
+            <tr>
+              <td>a2a</td>
+              <td>Agent-to-Agent Protocol</td>
+              <td>https://</td>
+            </tr>
+            <tr>
+              <td>openapi</td>
+              <td>OpenAPI specification document</td>
+              <td>https://</td>
+            </tr>
+            <tr>
+              <td>grpc</td>
+              <td>gRPC over HTTP/2 or HTTP/3</td>
+              <td>https://</td>
+            </tr>
+            <tr>
+              <td>graphql</td>
+              <td>GraphQL over HTTP</td>
+              <td>https://</td>
+            </tr>
+            <tr>
+              <td>websocket</td>
+              <td>WebSocket transport</td>
+              <td>wss://</td>
+            </tr>
+            <tr>
+              <td>local</td>
+              <td>The agent runs locally on the client machine</td>
+              <td>docker:, npx:, pip:</td>
+            </tr>
+            <tr>
+              <td>zeroconf</td>
+              <td>mDNS or DNS-SD service discovery</td>
+              <td>zeroconf:&lt;service_type&gt;</td>
+            </tr>
+            <tr>
+              <td>ucp</td>
+              <td>Universal Commerce Protocol</td>
+              <td>https://</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+
+    <section anchor="iana">
+      <name>IANA Considerations</name>
+      <t>
+        This document requests registration in two IANA registries. The registrations serve
+        different purposes. The RFC 8552 request covers AID TXT discovery at
+        `_agent.&lt;domain&gt;`, applicable across the `aid1` and `aid2` record versions defined
+        in this document. The RFC 6335 request reserves the service name `agent` for potential
+        future DNS service discovery usage under `_agent._tcp.&lt;domain&gt;`.
+      </t>
+
+      <section anchor="iana-rfc8552">
+        <name>Registration in the Underscored and Globally Scoped DNS Node Names Registry</name>
+        <t>
+          IANA is requested to register the following entry in the "Underscored and Globally
+          Scoped DNS Node Names" registry established by <xref target="RFC8552"/>.
+        </t>
+        <table anchor="aid-iana-rfc8552-table">
+          <name>Requested RFC 8552 Registration</name>
+          <tbody>
+            <tr>
+              <td>RR Type</td>
+              <td>TXT</td>
+            </tr>
+            <tr>
+              <td>Node Name</td>
+              <td>_agent</td>
+            </tr>
+            <tr>
+              <td>Reference</td>
+              <td>This document</td>
+            </tr>
+          </tbody>
+        </table>
+        <t>
+          The `_agent` node name is used exclusively for Agent Identity and Discovery. A single
+          TXT record published at `_agent.&lt;domain&gt;` contains semicolon-delimited key/value
+          pairs that identify an agent endpoint, protocol token, and optional metadata as defined
+          in <xref target="record-format"/> and <xref target="discovery-procedure"/>.
+        </t>
+        <t>
+          The requested node name is specific to AID and does not reserve the broader concept of
+          agents or agent-related discovery generally. Protocol-specific labels of the form
+          `_agent._&lt;proto&gt;.&lt;domain&gt;` are subordinate names beneath the registered
+          `_agent` node and do not require separate global registration.
+        </t>
+      </section>
+
+      <section anchor="iana-rfc6335">
+        <name>Registration in the Service Name and Transport Protocol Port Number Registry</name>
+        <t>
+          IANA is requested to register the following service-name-only entry in the "Service
+          Name and Transport Protocol Port Number" registry defined by <xref target="RFC6335"/>.
+        </t>
+        <table anchor="aid-iana-rfc6335-table">
+          <name>Requested RFC 6335 Registration</name>
+          <tbody>
+            <tr>
+              <td>Service Name</td>
+              <td>agent</td>
+            </tr>
+            <tr>
+              <td>Transport Protocol(s)</td>
+              <td>tcp</td>
+            </tr>
+            <tr>
+              <td>Description</td>
+              <td>Agent Identity and Discovery (AID): DNS-based discovery of agent service endpoints</td>
+            </tr>
+            <tr>
+              <td>Port Number</td>
+              <td>N/A</td>
+            </tr>
+            <tr>
+              <td>Assignment Notes</td>
+              <td>No port number is requested. This is a service-name-only registration intended
+              to establish `agent` for possible future SRV-based discovery under
+              `_agent._tcp.&lt;domain&gt;` while preserving the stable `_agent` label.</td>
+            </tr>
+            <tr>
+              <td>Reference</td>
+              <td>This document</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </middle>
+
+  <back>
+    <references>
+      <name>Normative References</name>
+      <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
+        <front><title>Key words for use in RFCs to Indicate Requirement Levels</title><author fullname="S. Bradner"/><date month="March" year="1997"/></front>
+        <seriesInfo name="RFC" value="2119"/>
+      </reference>
+      <reference anchor="RFC5890" target="https://www.rfc-editor.org/rfc/rfc5890">
+        <front><title>Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework</title><author fullname="J. Klensin"/><date month="August" year="2010"/></front>
+        <seriesInfo name="RFC" value="5890"/>
+      </reference>
+      <reference anchor="RFC9525" target="https://www.rfc-editor.org/rfc/rfc9525">
+        <front><title>Service Identity in TLS</title><author fullname="P. Saint-Andre"/><author fullname="R. Salz"/><date month="November" year="2023"/></front>
+        <seriesInfo name="RFC" value="9525"/>
+      </reference>
+      <reference anchor="RFC6335" target="https://www.rfc-editor.org/rfc/rfc6335">
+        <front><title>Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry</title><author fullname="M. Cotton"/><date month="August" year="2011"/></front>
+        <seriesInfo name="RFC" value="6335"/>
+      </reference>
+      <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
+        <front><title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title><author fullname="B. Leiba"/><date month="May" year="2017"/></front>
+        <seriesInfo name="RFC" value="8174"/>
+      </reference>
+      <reference anchor="RFC8552" target="https://www.rfc-editor.org/rfc/rfc8552">
+        <front><title>Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves</title><author fullname="A. Sullivan"/><date month="March" year="2019"/></front>
+        <seriesInfo name="RFC" value="8552"/>
+      </reference>
+      <reference anchor="RFC9421" target="https://www.rfc-editor.org/rfc/rfc9421">
+        <front><title>HTTP Message Signatures</title><author fullname="A. Backman"/><author fullname="J. Richer"/><author fullname="M. Sporny"/><date month="February" year="2024"/></front>
+        <seriesInfo name="RFC" value="9421"/>
+      </reference>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7638.xml"/>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8037.xml"/>
+    </references>
+    <references>
+      <name>Informative References</name>
+      <reference anchor="RFC8615" target="https://www.rfc-editor.org/rfc/rfc8615">
+        <front><title>Well-Known Uniform Resource Identifiers (URIs)</title><author fullname="M. Nottingham"/><date month="May" year="2019"/></front>
+        <seriesInfo name="RFC" value="8615"/>
+      </reference>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9728.xml"/>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8414.xml"/>
+      <reference anchor="RFC-NEMETHI-AID-00" target="https://datatracker.ietf.org/doc/html/draft-nemethi-aid-agent-identity-discovery-00">
+        <front>
+          <title>Agent Identity and Discovery (AID)</title>
+          <author fullname="B. Nemethi"/>
+          <date month="March" year="2026"/>
+        </front>
+        <seriesInfo name="Internet-Draft" value="draft-nemethi-aid-agent-identity-discovery-00"/>
+      </reference>
+    </references>
+
+    <section anchor="pka-handshake">
+      <name>PKA Handshake</name>
+      <t>
+        When `k` is present, clients MUST verify endpoint proof using HTTP Message Signatures
+        with Ed25519.
+      </t>
+
+      <section anchor="key-decoding">
+        <name>Key Decoding</name>
+        <t>
+          For v2, `k` MUST be unpadded base64url. Decoding MUST produce exactly 32 octets. Legacy
+          `z...` multibase keys MUST NOT be accepted in `v=aid2`. The corresponding JWK is:
+        </t>
+        <sourcecode type="json"><![CDATA[
+{ "kty": "OKP", "crv": "Ed25519", "x": "<k>" }
+        ]]></sourcecode>
+      </section>
+
+      <section anchor="derived-keyid">
+        <name>Derived `keyid`</name>
+        <t>
+          The expected HTTP Message Signature `keyid` is the RFC 7638 <xref target="RFC7638"/> JWK
+          thumbprint using SHA-256 over this exact UTF-8 JSON serialization, with no extra spaces:
+        </t>
+        <sourcecode type="text"><![CDATA[
+{"crv":"Ed25519","kty":"OKP","x":"<k>"}
+        ]]></sourcecode>
+        <t>
+          The SHA-256 digest is encoded as unpadded base64url. Implementations MUST NOT hash the
+          raw public key bytes directly for `keyid`.
+        </t>
+      </section>
+
+      <section anchor="request-response-shape">
+        <name>Request and Response Shape</name>
+        <t>
+          Validated RFC 9421 <xref target="RFC9421"/> Structured Fields shape:
+        </t>
+        <sourcecode type="http-message"><![CDATA[
+Accept-Signature: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "@status");created;expires;
+  keyid="<jwk-thumbprint>";alg="ed25519";
+  nonce="<client-challenge>";tag="aid-pka-v2"
+Signature-Input: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "@status");created=<unix>;expires=<unix>;
+  keyid="<jwk-thumbprint>";alg="ed25519";
+  nonce="<client-challenge>";tag="aid-pka-v2"
+Signature: aid-pka=:<base64-signature>:
+Cache-Control: no-store
+        ]]></sourcecode>
+        <t>
+          The signature MUST NOT cover HTTP `Date`.
+        </t>
+        <t>
+          The client challenge MUST contain at least 32 bytes of entropy and SHOULD be
+          transported as unpadded base64url in the RFC 9421 `nonce` signature parameter. The
+          verifier MUST compare the received `nonce` exactly to the challenge it sent. Servers are
+          not required to store nonce state in v2 core because the verifier supplies the one-shot
+          nonce and the signed response is not cacheable.
+        </t>
+        <t>
+          `created` and `expires` are mandatory. `expires` MUST be greater than `created`.
+          `expires` minus `created` MUST NOT exceed 300 seconds and SHOULD be 60 seconds or less.
+          Verifiers MAY allow a small clock-skew tolerance when evaluating `created` and
+          `expires`.
+        </t>
+        <t>
+          Signers MUST emit `alg="ed25519"` lowercase. Verifiers MUST compare the semantic
+          algorithm value case-insensitively and MUST reconstruct `@signature-params` from the
+          received Structured Field value.
+        </t>
+      </section>
+
+      <section anchor="covered-components">
+        <name>Covered Components</name>
+        <t>
+          The base v2 PKA response signature covers `"@method";req`, `"@target-uri";req`,
+          `"@authority";req`, and `"@status"`. `@method`, `@target-uri`, and `@authority` are
+          request-derived components and therefore use `;req`. `@status` is response-derived and
+          does not use `;req`. The domain-binding profile in
+          <xref target="pka-domain-binding"/> extends this base covered set with
+          `"aid-domain";req`; the tag remains `aid-pka-v2`.
+        </t>
+        <t>
+          `@status` signs the status actually returned. PKA does not require status `200`. A
+          signed `401` can still prove endpoint authenticity before an OAuth or auth.md handoff
+          continues.
+        </t>
+      </section>
+
+      <section anchor="uri-authority-redirects">
+        <name>URI, Authority, and Redirects</name>
+        <t>
+          Clients MUST NOT follow redirects during PKA verification. The request context is the
+          discovered endpoint URI after fragment removal. Query strings are preserved.
+        </t>
+        <t>
+          `@authority` uses the externally visible request authority: lowercase hostname, omit
+          the default port, retain a non-default port. Servers behind reverse proxies must sign
+          the externally visible request context, not internal hop-local scheme, host, or port
+          values.
+        </t>
+      </section>
+
+      <section anchor="verifier-summary">
+        <name>Verifier Summary</name>
+        <t>
+          A verifier accepts a v2 PKA response only when:
+        </t>
+        <ol>
+          <li>The selected AID record contains a valid v2 `k`.</li>
+          <li>The response contains a valid `Signature-Input` and `Signature`.</li>
+          <li>The tag is `tag="aid-pka-v2"` and the covered components are either exactly the four
+          components in <xref target="covered-components"/>, or those four plus the optional
+          `"aid-domain";req` component (between `"@authority";req` and `"@status"`) per the
+          domain-binding profile in <xref target="pka-domain-binding"/>.</li>
+          <li>`keyid` equals the RFC 7638 thumbprint derived from DNS `k`.</li>
+          <li>`alg` has semantic value `ed25519`.</li>
+          <li>`nonce` exactly equals the verifier-generated challenge.</li>
+          <li>`created` and `expires` pass freshness checks.</li>
+          <li>The response includes `Cache-Control: no-store`.</li>
+          <li>Ed25519 verification succeeds over the reconstructed RFC 9421 signature base.</li>
+        </ol>
+      </section>
+
+      <section anchor="pka-domain-binding">
+        <name>Domain Binding</name>
+        <t>
+          This profile lets an endpoint prove that it consents to serve as the agent for the
+          queried domain, addressing the unauthorized-association gap described in
+          <xref target="what-pka-proves"/>. When `k` is present in an `aid2` record, clients
+          SHOULD request domain binding by default (see <xref target="algorithm"/>). The
+          domain-binding indicator in the discovery result is the expected outcome for
+          well-configured v2 deployments; clients that need a hard enforcement boundary use
+          `domain-binding=require` in enterprise policy (<xref target="enterprise-policy"/>).
+        </t>
+        <t>
+          There is a single RFC 9421 tag for all v2 PKA proofs, `aid-pka-v2`. A proof is
+          domain-bound if and only if its signed covered set includes the `"aid-domain";req`
+          component, positioned strictly between `"@authority";req` and `"@status"`. The covered
+          set is part of `@signature-params`, which is itself signed, so coverage is authenticated
+          and cannot be altered without invalidating the signature. The `tag` identifies the
+          application profile per <xref target="RFC9421"/> Section 2.3; it is the covered set, not
+          a separate tag, that distinguishes an unbound proof from a domain-bound one.
+        </t>
+        <t>
+          A client requesting domain binding sends the queried domain in the `AID-Domain` request
+          header and requests an extended response signature whose covered set adds
+          `"aid-domain";req`:
+        </t>
+        <sourcecode type="http-message"><![CDATA[
+AID-Domain: example.com
+Accept-Signature: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "aid-domain";req "@status");created;expires;
+  keyid="<jwk-thumbprint>";alg="ed25519";
+  nonce="<client-challenge>";tag="aid-pka-v2"
+        ]]></sourcecode>
+        <t>
+          The `AID-Domain` value is the exact host the client queried in
+          <xref target="algorithm"/> (step 2), normalized to its A-label form per
+          <xref target="algorithm"/> (step 1), lowercased, and without a trailing dot or port.
+          Signer and verifier MUST use this identical byte value.
+        </t>
+        <t>
+          A server that supports this profile and serves the named domain responds with the
+          <xref target="request-response-shape"/> shape, except that the covered set includes
+          `"aid-domain";req` after `"@authority";req`. The `aid-domain` component is the request
+          header field; its RFC 9421 component identifier is the lowercased field name
+          `aid-domain`, so the signature binds the exact value the client sent.
+        </t>
+        <t>
+          A server that supports this profile but does not serve the named domain MUST NOT
+          produce a signature covering that `AID-Domain` value. It SHOULD respond with status
+          `403` and no `Signature-Input` header. A server that does not support this profile
+          ignores the header and responds with the base <xref target="request-response-shape"/>
+          shape, whose covered set omits `aid-domain`, which remains a valid endpoint proof
+          without domain binding.
+        </t>
+        <t>
+          A response that carries no valid `aid-pka-v2` signature, including a `403` refusal, is
+          a failed endpoint proof under <xref target="security"/>, so discovery fails whenever the
+          selected record contains `k`. A profile-aware endpoint that refuses an unserved domain
+          therefore causes discovery to fail for that domain, which is the intended outcome.
+        </t>
+        <t>
+          Verifier rules, in addition to <xref target="verifier-summary"/>:
+        </t>
+        <ol>
+          <li>The covered set of an `aid-pka-v2` response MUST be exactly the four base
+          components of <xref target="request-response-shape"/>, or those four base components
+          plus `"aid-domain";req` (between `"@authority";req` and `"@status"`) and nothing else. A
+          response whose covered set includes `aid-domain` is domain-bound; one whose covered set
+          omits it is unbound.</li>
+          <li>A response is verified as domain-bound only when its covered set includes
+          `"aid-domain";req`. A client that sent an `AID-Domain` request header rebuilds the
+          signature base using its own canonical queried domain as the `aid-domain` value; a
+          domain-bound proof verifies only when the signed domain matches that value.</li>
+          <li>A client that did not send `AID-Domain` MUST reject a response whose covered set
+          includes `aid-domain` (fail-closed).</li>
+          <li>Clients that request domain binding MUST expose a boolean domain-binding indicator
+          as part of PKA state, set `true` only when `aid-domain` was covered and the proof
+          verified for the queried domain, and `false` for a verified unbound proof.</li>
+          <li>Requesting domain binding does not by itself mitigate unauthorized association,
+          because an attacker-controlled endpoint can ignore `AID-Domain` and return a valid
+          unbound proof. A client gains the mitigation only when it requires domain binding and
+          rejects unbound proofs by local policy.</li>
+        </ol>
+        <t>
+          Domain binding is a statement by the endpoint that it serves the named domain. It does
+          not prove authorization, delegation, or organizational identity.
+        </t>
+        <t>
+          In AID v2, domain binding is optional-but-default: clients SHOULD send `AID-Domain`,
+          and an unbound proof (one whose covered set omits `aid-domain`) remains a valid outcome
+          unless local policy requires binding (`domain-binding=require`; see
+          <xref target="enterprise-policy"/>). A future major version (`aid3`) is expected to make
+          sending `AID-Domain` REQUIRED for clients performing PKA and to make rejecting unbound
+          proofs the baseline. Establishing high adoption while the installed base is small is
+          intended to minimize switching cost at that transition; implementations that already
+          send `AID-Domain` by default require no change at `aid3`.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="well-known-fallback">
+      <name>.well-known Fallback</name>
+      <t>
+        AID remains DNS-first. The fallback defined here is a non-normative convenience for
+        environments where publishing DNS TXT records is difficult. It does not change the RFC
+        8552 scope of `_agent`.
+      </t>
+      <ul>
+        <li>Path: `GET https://&lt;domain&gt;/.well-known/agent`</li>
+        <li>Format: JSON mirroring the TXT keys, including aliases.</li>
+        <li>Trust source: `well-known-tls`.</li>
+        <li>Security: TLS certificate validation still applies. `pka` may still apply, but it
+        proves consistency with TLS-hosted metadata, not DNS-published external trust.</li>
+        <li>Client behavior: use DNS first and fall back only on `ERR_NO_RECORD` or
+        `ERR_DNS_LOOKUP_FAILED`.</li>
+        <li>Error mapping: use `ERR_FALLBACK_FAILED` when the fallback fails or is invalid.</li>
+      </ul>
+      <t>
+        DNS-discovered records have `trustSource=dns`. Fallback-discovered records have
+        `trustSource=well-known-tls`. If a policy requires DNSSEC-backed trust, `.well-known`
+        cannot satisfy it. The `.well-known` URI convention itself is described in
+        <xref target="RFC8615"/>.
+      </t>
+    </section>
+
+    <section anchor="composition-notes" numbered="false">
+      <name>Composition Notes</name>
+      <t>
+        This appendix is non-normative. It describes how AID composes with adjacent mechanisms
+        without incorporating them into AID core.
+      </t>
+
+      <section anchor="composition-signature-primitives" numbered="false">
+        <name>Shared Signature Primitives</name>
+        <t>
+          AID v2 endpoint proof shares its underlying cryptographic primitives with other
+          request-signing mechanisms built on Ed25519 and RFC 9421 HTTP Message Signatures, such
+          as RFC 7638 JWK thumbprints, `created`, `expires`, `nonce`, and `tag`. AID does not
+          incorporate those mechanisms. They sign automated client requests to origins; AID PKA
+          proves endpoint control for a DNS-discovered agent endpoint.
+        </t>
+        <t>
+          Operators may reuse key material across AID and a request-signing deployment if their
+          threat model allows it, but this document does not recommend reuse. Reuse shares blast
+          radius between endpoint proof and request-signing.
+        </t>
+      </section>
+
+      <section anchor="composition-authorization" numbered="false">
+        <name>Authorization and OAuth</name>
+        <t>
+          AID can support an authorization handoff without adding authorization-specific fields
+          to core:
+        </t>
+        <ol>
+          <li>AID resolves a domain to `u` and `p`.</li>
+          <li>If `k` is present, PKA verifies the endpoint.</li>
+          <li>The client follows the endpoint's protocol and authorization layer, including
+          RFC 9728 <xref target="RFC9728"/> OAuth 2.0 Protected Resource Metadata and RFC 8414
+          <xref target="RFC8414"/> OAuth 2.0 Authorization Server Metadata where present.</li>
+        </ol>
+        <t>
+          AID does not specify audience restriction, provider trust lists, registration payloads,
+          scopes, credential types, revocation, or an authorization metadata registry.
+        </t>
+      </section>
+
+      <section anchor="composition-workload-identity" numbered="false">
+        <name>Workload Identity Federation</name>
+        <t>
+          AID may be used by future workload identity federation profiles as a public
+          first-contact anchor. AID v2 core does not define trust-domain mapping, bundle
+          federation, hop re-binding, OAuth client registration, or workload authorization.
+        </t>
+      </section>
+
+      <section anchor="composition-key-addressed-identity" numbered="false">
+        <name>Relationship to Key-Addressed Identity Models</name>
+        <t>
+          AID remains DNS-authority-rooted: the domain owner publishes the current endpoint and
+          current endpoint-proof key inside a TXT payload at a name derived from the domain. This
+          is distinct from designs in which the public key itself is the address and DNS-shaped
+          records are signed directly under that key. Specification and reviewer-facing language
+          should say "DNS-current endpoint/key" and should not imply self-certifying names,
+          key-addressed identity, or cryptographic continuity across key changes.
+        </t>
+      </section>
+    </section>
+
+    <section anchor="migration-notes" numbered="false">
+      <name>Migration Notes</name>
+      <t>This appendix is non-normative.</t>
+
+      <section anchor="provider-migration" numbered="false">
+        <name>Provider Migration</name>
+        <ol>
+          <li>Inventory current legacy `aid1` records.</li>
+          <li>For PKA records, decode the v1 multibase/base58btc `k` to the 32-byte Ed25519
+          public key.</li>
+          <li>Encode those bytes as unpadded base64url. This is the v2 `k`.</li>
+          <li>Publish `v=aid2` with the same endpoint, protocol, and v2 `k`, without `i`.</li>
+          <li>Keep `aid1` during the compatibility window.</li>
+          <li>Remove `aid1` after old-client support is no longer needed.</li>
+        </ol>
+      </section>
+
+      <section anchor="client-migration" numbered="false">
+        <name>Client Migration</name>
+        <ol>
+          <li>Support both `aid1` and `aid2` parsing.</li>
+          <li>Partition records by version before ambiguity checks.</li>
+          <li>Prefer `aid2` when both versions are valid and policy allows it.</li>
+          <li>Keep legacy PKA handling only for `aid1` records.</li>
+        </ol>
+      </section>
+    </section>
+  </back>
+</rfc>
