@@ -727,10 +727,12 @@ _agent.acme.com. 300 IN TXT (
         unless changed through the normal extension process.
       </t>
       <ul>
-        <li>Token registries: the canonical lists for `auth` and `proto` tokens are maintained at
-        <eref target="https://github.com/agentcommunity/aid-tokens">https://github.com/agentcommunity/aid-tokens</eref>.
-        Additions require a pull request and are governed by a first-come, first-served policy
-        with expert review.</li>
+        <li>Token registries: the canonical lists for `auth` and `proto` tokens are maintained as
+        machine-readable constants at
+        <eref target="https://github.com/agentcommunity/agent-identity-discovery">https://github.com/agentcommunity/agent-identity-discovery</eref>,
+        generated into per-language SDK constants. Additions are proposed as an issue describing
+        motivation, examples, security implications, and backward compatibility, followed by a
+        pull request; changes with security implications require review before merging.</li>
         <li>Global index: an open DNS crawler and community dashboard showing AID adoption is
         maintained at
         <eref target="https://github.com/agentcommunity/aid-registry">https://github.com/agentcommunity/aid-registry</eref>.</li>
