@@ -189,7 +189,7 @@
           <dt>auth (`a`) Recommended</dt>
           <dd>Authentication hint token from <xref target="auth-registry"/>. Example: `a=oauth2_code`.</dd>
           <dt>desc (`s`) Optional</dt>
-          <dd>Short human-readable description, up to 60 UTF-8 bytes. Example: `s=Primary AI Gateway`.</dd>
+          <dd>Short human-readable description. MUST be no more than 60 UTF-8 bytes. Example: `s=Primary AI Gateway`.</dd>
           <dt>docs (`d`) Optional</dt>
           <dd>Absolute `https://` URL for human-readable documentation. Example: `d=https://docs.example.com/agent`.</dd>
           <dt>dep (`e`) Optional</dt>
@@ -463,7 +463,7 @@ _agent.shared.team.example.com. 300 IN TXT (
         </t>
         <t>
           PKA does not prove: that a user authorized a specific action; that an OAuth token is
-          valid; that a workload identity credential belongs to a trust domain; that an internal
+          valid; that a SPIFFE SVID belongs to a trust domain; that an internal
           policy engine approved a request; that a key change is cryptographically continuous with
           a previous key; or that the endpoint consents to serve as the agent for the queried
           domain.
@@ -678,8 +678,8 @@ _agent.acme.com. 300 IN TXT (
         <name>Future Rotation Profile</name>
         <t>
           If AID later needs managed rotation for pinned clients or provenance profiles, that
-          should be a separate HTTP key-directory profile, for example one using JWKS-style key
-          overlap:
+          should be a separate HTTP key-directory profile, likely using JWKS or Web Bot Auth
+          style overlap:
         </t>
         <sourcecode type="json"><![CDATA[
 {
@@ -1181,13 +1181,13 @@ Accept-Signature: aid-pka=("@method";req "@target-uri";req
     <section anchor="well-known-fallback">
       <name>.well-known Fallback</name>
       <t>
-        AID remains DNS-first. The fallback defined here is a non-normative convenience for
-        environments where publishing DNS TXT records is difficult. It does not change the RFC
-        8552 scope of `_agent`.
+        AID remains DNS-first. The `.well-known` fallback is a convenience for environments
+        where publishing DNS TXT records is difficult. It does not change the RFC 8552 scope of
+        `_agent`.
       </t>
       <ul>
         <li>Path: `GET https://&lt;domain&gt;/.well-known/agent`</li>
-        <li>Format: JSON mirroring the TXT keys, including aliases.</li>
+        <li>Format: JSON mirroring v2 record keys.</li>
         <li>Trust source: `well-known-tls`.</li>
         <li>Security: TLS certificate validation still applies. `pka` may still apply, but it
         proves consistency with TLS-hosted metadata, not DNS-published external trust.</li>
@@ -1211,18 +1211,19 @@ Accept-Signature: aid-pka=("@method";req "@target-uri";req
       </t>
 
       <section anchor="composition-signature-primitives" numbered="false">
-        <name>Shared Signature Primitives</name>
+        <name>Web Bot Auth</name>
         <t>
-          AID v2 endpoint proof shares its underlying cryptographic primitives with other
-          request-signing mechanisms built on Ed25519 and RFC 9421 HTTP Message Signatures, such
-          as RFC 7638 JWK thumbprints, `created`, `expires`, `nonce`, and `tag`. AID does not
-          incorporate those mechanisms. They sign automated client requests to origins; AID PKA
-          proves endpoint control for a DNS-discovered agent endpoint.
+          AID v2 follows Web Bot Auth where the layers match: Ed25519, RFC 9421 HTTP Message
+          Signatures, RFC 7638 JWK thumbprints, `created`, `expires`, `nonce`, and `tag`.
         </t>
         <t>
-          Operators may reuse key material across AID and a request-signing deployment if their
-          threat model allows it, but this document does not recommend reuse. Reuse shares blast
-          radius between endpoint proof and request-signing.
+          AID does not become Web Bot Auth. Web Bot Auth signs automated client requests to
+          origins. AID PKA proves endpoint control for a DNS-discovered agent endpoint.
+        </t>
+        <t>
+          Operators may reuse key material across AID and Web Bot Auth if their threat model
+          allows it, but this document does not recommend reuse. Reuse shares blast radius
+          between endpoint proof and request-signing.
         </t>
       </section>
 
@@ -1246,23 +1247,36 @@ Accept-Signature: aid-pka=("@method";req "@target-uri";req
       </section>
 
       <section anchor="composition-workload-identity" numbered="false">
-        <name>Workload Identity Federation</name>
+        <name>SPIFFE and WIMSE</name>
         <t>
-          AID may be used by future workload identity federation profiles as a public
-          first-contact anchor. AID v2 core does not define trust-domain mapping, bundle
-          federation, hop re-binding, OAuth client registration, or workload authorization.
+          AID may be used by future SPIFFE or WIMSE profiles as a public first-contact anchor.
         </t>
+        <t>
+          AID v2 core does not define:
+        </t>
+        <ul>
+          <li>SPIFFE trust-domain mapping;</li>
+          <li>SPIFFE bundle federation;</li>
+          <li>WIMSE hop re-binding;</li>
+          <li>OAuth client registration;</li>
+          <li>workload authorization.</li>
+        </ul>
       </section>
 
       <section anchor="composition-key-addressed-identity" numbered="false">
         <name>Relationship to Key-Addressed Identity Models</name>
         <t>
-          AID remains DNS-authority-rooted: the domain owner publishes the current endpoint and
-          current endpoint-proof key inside a TXT payload at a name derived from the domain. This
-          is distinct from designs in which the public key itself is the address and DNS-shaped
-          records are signed directly under that key. Specification and reviewer-facing language
-          should say "DNS-current endpoint/key" and should not imply self-certifying names,
-          key-addressed identity, or cryptographic continuity across key changes.
+          AID v2 remains compatible with the general idea of compact Ed25519 key material as used
+          by some key-addressed identity designs, but it does not adopt a key-addressed identity
+          model. In such designs, the public key itself is the address and DNS-shaped records are
+          signed directly under that key. AID remains DNS-authority-rooted: the DNS owner
+          publishes the current endpoint and current endpoint-proof key inside a TXT payload at a
+          name derived from the domain, not from the key.
+        </t>
+        <t>
+          Specification and reviewer-facing language should say "DNS-current endpoint/key" and
+          should not imply self-certifying names, key-addressed identity, or cryptographic
+          continuity across key changes.
         </t>
       </section>
     </section>
@@ -1291,6 +1305,8 @@ Accept-Signature: aid-pka=("@method";req "@target-uri";req
           <li>Partition records by version before ambiguity checks.</li>
           <li>Prefer `aid2` when both versions are valid and policy allows it.</li>
           <li>Keep legacy PKA handling only for `aid1` records.</li>
+          <li>Store previous security state using derived JWK thumbprints so a same-key `aid1`
+          to `aid2` migration does not look like key replacement.</li>
         </ol>
       </section>
     </section>
