@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Internet-Draft source for AID.
-  Aligned to the current RFCXML v3 template model and the AID v2.0.0 specification.
+  Aligned to the current RFCXML v3 template model and the current normative AID specification.
 -->
 <?xml-model href="rfc7991bis.rnc"?>
 
@@ -89,7 +89,7 @@
       </ul>
       <t>
         This revision updates the specification from the AID v1.2 record format described in
-        <xref target="RFC-NEMETHI-AID-00"/> to the AID v2.0.0 wire format: the `aid2` record uses
+        <xref target="RFC-NEMETHI-AID-00"/> to the current AID v2 (`aid2`) wire format: the record uses
         an unpadded base64url Ed25519 JWK `x` value for the endpoint-proof key and an RFC 7638 JWK
         thumbprint as the HTTP Message Signature `keyid`, removing the `kid`/`i` rotation alias
         used by `aid1`. It also defines an optional domain-binding extension to the endpoint-proof
