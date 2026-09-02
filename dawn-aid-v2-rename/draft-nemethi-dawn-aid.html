@@ -1,0 +1,2867 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>Agent Identity and Discovery (AID)</title>
+<meta content="Balazs Nemethi" name="author">
+<meta content="
+       
+        Agent Identity and Discovery (AID) answers one question: given a domain, where is the
+        agent and which protocol should a client speak? An AID client queries a DNS TXT record at
+        the well-known subdomain _agent.&lt;domain&gt; and learns the service endpoint URI,
+        protocol token, authentication hint, and optional metadata for that agent.
+       
+       
+        This document defines the AID v2 (`aid2`) record format, client discovery algorithm,
+        exact-host lookup rules, endpoint-proof (PKA) handshake using Ed25519 HTTP Message
+        Signatures, security requirements, and IANA registrations for the `_agent` DNS node name
+        and the `agent` service name. The legacy `aid1` record format is retained as a
+        compatibility format for clients migrating from earlier deployments. AID is intentionally
+        small; after discovery, protocol-specific mechanisms such as MCP or A2A handle
+        communication and capability negotiation.
+       
+    " name="description">
+<meta content="xml2rfc 3.34.0" name="generator">
+<meta content="AID" name="keyword">
+<meta content="agent discovery" name="keyword">
+<meta content="DNS" name="keyword">
+<meta content="service discovery" name="keyword">
+<meta content="DAWN" name="keyword">
+<meta content="draft-nemethi-dawn-aid-latest" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.34.0
+    Python 3.14.7
+    ConfigArgParse 1.7.5
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.1.1
+    natsort 8.4.0
+    platformdirs 4.11.5
+    pycountry 24.6.1
+    PyYAML 6.0.3
+    requests 2.33.1
+    wcwidth 0.8.2
+-->
+<link href="draft-nemethi-dawn-aid.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Lora SemiBold'), local('Lora-SemiBold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-semibold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+  --background-color: #fff;
+  --text-color: #222;
+  --title-color: #191919;
+  --link-color: #2a6496;
+  --highlight-color: #f9f9f9;
+  --line-color: #eee;
+  --pilcrow-weak: #ddd;
+  --pilcrow-strong: #bbb;
+  --small-font-size: 14.5px;
+  --font-mono: 'Oxygen Mono', monospace;
+  --font-title: "Sofia Sans Semi Condensed", sans-serif;
+  scrollbar-color: #bbb #eee;
+}
+body {
+  max-width: 600px;
+  margin: 75px auto;
+  padding: 0 5px;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  font: 16px/22px "Lora", serif;
+  scroll-behavior: smooth;
+}
+
+.ears {
+  display: none;
+}
+
+/* headings */
+section {
+  clear: both;
+}
+.section-number {
+  padding-right: 0.5em;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-title);
+  font-weight: 680;
+  margin: 0.8em 0 0.3em;
+  font-size-adjust: 0.5;
+  color: var(--title-color);
+}
+h1 {
+  &#title {
+    font-size: 32px;
+    line-height: 40px;
+    clear: both;
+    margin: 1.5em 0 0.2em;
+  }
+  &#rfcnum {
+    margin: 1.5em 0 0.2em;
+    & + h1#title {
+      margin: 0.2em 0;
+    }
+  }
+}
+
+h1, h2, h3 {
+  font-size: 22px;
+  line-height: 27px;
+}
+h4, h5, h6 {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+/* general structure */
+.author {
+  padding-bottom: 0.3em;
+  vertical-align: top;
+}
+#abstract+p {
+  font-size: 18px;
+  line-height: 24px;
+  & code, & samp, & tt {
+    font-size: 16px;
+    line-height: 0;
+  }
+}
+
+p {
+  padding: 0;
+  margin: 0.5em 0;
+  text-align: left;
+}
+div {
+  margin: 0;
+}
+.alignRight {
+  margin: 1em 0;
+  &.art-text {
+    background-color: var(--highlight-color);
+    border: 1px solid var(--line-color);
+    border-radius: 3px;
+    padding: 0.5em 1em 0;
+    margin-bottom: 0.5em;
+    & pre {
+      padding: 0;
+      width: auto;
+    }
+  }
+  & > *:first-child {
+    border: none;
+    margin: 0;
+    float: right;
+    clear: both;
+  }
+  & > *:nth-child(2) {
+    clear: both;
+    display: block;
+    border: none;
+  }
+}
+svg {
+  display: block;
+  /* font-family isn't space-separated, but =~ will have to do */
+  &[font-family~="monospace" i], & [font-family~="monospace" i] {
+    font-family: var(--font-mono);
+  }
+}
+.alignCenter {
+  margin: 1em 0;
+  &.art-text {
+    background-color: var(--highlight-color);
+    border: 1px solid var(--line-color);
+    border-radius: 3px;
+    padding: 0.5em 1em 0;
+    margin-bottom: 0.5em;
+    & pre {
+      padding: 0;
+      width: auto;
+    }
+  }
+  & > *:first-child {
+    border: none;
+    /* this isn't optimal, but it's an existence proof.  PrinceXML doesn't
+       support flexbox yet.
+    */
+    display: table;
+    margin: 0 auto;
+  }
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 0.5em 2em;
+  & :is(ol, ul) {
+    margin-left: 1em;
+  }
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+  & li {
+    margin-top: 0.5em;
+  }
+}
+:is(ul, ol).compact, .ulCompact, .olCompact {
+  margin: 0 0 0 2em;
+  & li {
+    margin: 0;
+    & :first-child { margin-top: 0; }
+    & :last-child { margin-bottom: 0; }
+  }
+}
+
+/* definition lists */
+dl {
+  clear: left;
+  --indent: 3ch;
+  /* --indent: attr(indent ch); not supported in any browser, but we can dream */
+  &.olPercent {
+    --indent: 5ch;
+    & > dt {
+      min-width: calc(var(--indent) - 2ch);
+      float: none;
+    }
+  }
+
+  dl > dd > & {
+    margin-top: 0.5em;
+    margin-bottom: 0;
+  }
+
+  &:not(.dlNewline) > dt {
+    float: left;
+    margin-right: 2ch;
+    min-width: 8ch;
+  }
+  & > dd {
+    margin-bottom: .8em;
+    margin-left: var(--indent) !important; /* stupid element overrides */
+    min-height: 2ex;
+  }
+}
+:is(dl.compact, .dlCompact) > dd {
+  margin-bottom: 0;
+  & > :is(:first-child, .break:first-child + *) {
+    margin-top: 0;
+  }
+  & > :is(:last-child) {
+    margin-bottom: 0;
+  }
+}
+:is(dd, span).break {
+  display: none;
+}
+
+/* links */
+a {
+  text-decoration: none;
+  &[href] {
+    color: var(--link-color);
+    &:hover { text-decoration: underline; }
+    &.selfRef {
+      color: var(--text-color);
+      &:hover {
+        text-decoration: none;
+        background-color: var(--highlight-color);
+      }
+    }
+  }
+}
+.iref + a[href].internal {
+  color: var(--text-color);
+}
+a.xref:is(.cite, .auto), :is(#status-of-memo, #copyright) a {
+  white-space: nowrap;
+}
+
+/* Figures */
+tt, code, pre {
+  background-color: var(--highlight-color);
+  font: 14px/22px var(--font-mono);
+}
+tt, code {
+  /* changing the font for inline elements leads to different ascender
+     and descender heights; as we want to retain baseline alignment,
+     remove leading to avoid altering the final height of lines
+     note: this fails if these blocks take an entire line,
+     a different solution would be great */
+  line-height: 0;
+}
+:is(h1, h2, h3, h4, h5, h6) :is(tt, code) {
+  font-size: 84%;
+}
+pre {
+  border: 1px solid var(--line-color);
+  font-size: 13.5px;
+  line-height: 16px;
+  letter-spacing: -0.2px;
+  margin: 5px;
+  padding: 5px;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0.5em 0;
+  padding: 0;
+  & blockquote {
+    margin: 0.8em 0.4em 0.4em;
+  }
+}
+figcaption, caption {
+  font-style: italic;
+  margin: 0.5em 1.5em;
+  text-align: left;
+  caption-side: bottom;
+}
+@media screen {
+  /* Auto-collapse boilerplate. */
+  :is(#status-of-memo, #copyright) {
+    & p {
+      margin: -2px 0;
+      max-height: 0;
+      transition: max-height 2s ease, margin 0.5s ease 0.5s;
+      overflow: hidden;
+    }
+    &:hover p,
+    & h2:target ~ p {
+      margin: 0.5em 0;
+      max-height: 500px;
+      overflow: auto;
+    }
+  }
+  pre, svg {
+    display: inline-block;
+    /* In the horizontal direction, sometimes people make over-sized figures.
+       Scrollbars for those is therefore necessary: auto adds them as necessary..
+       In the vertical direction, the line-height can combine with the font
+       asender/descender height to produce scrollbars: hidden avoids that. */
+    overflow: auto hidden;
+  }
+  pre {
+    max-width: 100%;
+    width: calc(100% - 22px - 1em);
+  }
+  svg {
+    max-width: calc(100% - 22px - 1em);
+  }
+  figure pre {
+    display: block;
+    width: calc(100% - 25px);
+  }
+  :is(pre, svg) + .pilcrow {
+    display: inline-block;
+    vertical-align: text-bottom;
+    padding-bottom: 8px;
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 0 2em;
+  font-style: italic;
+}
+blockquote {
+  margin: 1em 0;
+  border-left: 2px var(--pilcrow-strong) solid;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+
+/* tables */
+table {
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  &.right { margin-left: auto; }
+  &.center { margin-left: auto; margin-right: auto; }
+  &.left { margin-right: auto; }
+  & .text-left { text-align: left; }
+  & .text-center { text-align: center; }
+  & .text-right { text-align: right; }
+  & caption {
+    margin: 0;
+    padding: 3px 0 3px 1em;
+  }
+  & p { margin: 0; }
+}
+
+thead, tbody {
+  border: 1px solid var(--line-color);
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px;
+}
+th {
+  background-color: var(--line-color);
+}
+:is(tr:nth-child(2n), thead+tbody > tr:nth-child(2n+1)) > td {
+  background-color: var(--background-color);
+}
+:is(tr:nth-child(2n+1), thead+tbody > tr:nth-child(2n)) > td {
+  background-color: var(--highlight-color);
+}
+
+/* pilcrow */
+a.pilcrow {
+  margin-left: 3px;
+  opacity: 0.2;
+  user-select: none;
+  &[href] {
+    color: var(--pilcrow-weak);
+    &:hover { text-decoration: none; }
+  }
+  @media not print {
+    :hover > &, &:focus {
+      opacity: 1;
+    }
+    &[href]:hover {
+      color: var(--pilcrow-strong);
+      background-color: transparent;
+    }
+  }
+  @media print {
+    display: none;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid var(--line-color);
+}
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: var(--small-font-size);
+}
+.role {
+  font-variant: all-small-caps;
+}
+sub, sup {
+  line-height: 1;
+  font-size: 80%;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: var(--small-font-size);
+  line-height: 18px;
+  --identifier-width: 15ch;
+  & dt {
+    width: var(--identifier-width);
+    min-width: var(--identifier-width);
+    clear: left;
+    float: left;
+    text-align: right;
+    margin-right: 1ch;
+  }
+  & dd {
+    margin: 0;
+    margin-left: calc(1em + var(--identifier-width)) !important;
+    min-width: 5em;
+  }
+  & .authors {
+    & .author {
+      display: inline-block;
+      margin-right: 1.5em;
+    }
+    & .org {
+      font-style: italic;
+    }
+  }
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #999;
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+  & .prepared {
+    float: right;
+  }
+}
+
+/* table of contents */
+#toc {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+
+  & nav {
+    & ul {
+      margin: 0 0.5em 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    & li {
+      line-height: 1.3em;
+      margin: 2px 0;
+      padding-left: 1.2em;
+      text-indent: -1.2em;
+    }
+  }
+  & a.xref {
+    white-space: normal;
+  }
+}
+
+.references {
+  & > dt {
+    text-align: right;
+    font-weight: bold;
+    min-width: 10ch;
+    margin-right: 1.5ch;
+    &:target::before {
+      content: "⇒";
+      margin: 0 10px 0 -25px;
+    }
+  }
+  & > dd {
+    margin-left: 12ch !important;
+    overflow: visible;
+    & .refInstance {
+      margin-bottom: 0.8em;
+    }
+    & .ascii {
+      margin-bottom: 0.25em;
+    }
+  }
+}
+
+#rfc\.index\.index + ul {
+  margin-left: 0;
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  max-width: 20em;
+  margin: 1em auto 1em 0;
+
+  & .nameRole {
+    font-weight: 700;
+    margin-left: 0;
+  }
+  & .label {
+    margin: 0.5em 0;
+  }
+  & .type {
+    display: none;
+  }
+  & .alternative-contact {
+    margin: 0.5em 0 0.25em 0;
+  }
+  & .non-ascii {
+    margin: 0 0 0 2em;
+  }
+  & div.left {
+    text-align: left;
+  }
+  & div.right {
+    text-align: right;
+  }
+}
+
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+@media (min-width: 500px) {
+  #authors-addresses {
+    & > section {
+      column-count: 2;
+      column-gap: 20px;
+    }
+    & > section > h2 {
+      column-span: all;
+    }
+    /* hack for break-inside: avoid-column */
+    & address {
+      display: inline-block;
+      break-inside: avoid-column;
+    }
+  }
+}
+
+/* Comments */
+.rfcEditorRemove {
+  & p:first-of-type {
+    font-style: italic;
+  }
+}
+.cref {
+  background-color: rgba(249, 232, 105, 0.3);
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+
+@media screen {
+  #toc {
+    & nav {
+      font-family: var(--font-title);
+      font-weight: 360;
+      & > ul { margin-bottom: 2em; }
+      & ul {
+        margin: 0 0 0 4px;
+        & :is(p, li) {
+          margin: 2px 0;
+        }
+      }
+    }
+    & a.toplink {
+      float: right;
+    }
+  }
+}
+@media not screen {
+  #toc a.toplink {
+    display: none;
+  }
+}
+
+
+/* TOC layout for smaller screens */
+@media screen and (max-width: 929px) {
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 1px 0 0 0;
+    margin: 0;
+    border-bottom: 1px solid #ccc;
+    opacity: 0.6;
+    & h2 {
+      margin: 0;
+      padding: 2px 0 2px 6px;
+      padding-right: 1em;
+      font-size: 18px;
+      line-height: 24px;
+      min-width: 190px;
+      text-align: right;
+      background-color: #444;
+      color: white;
+      cursor: pointer;
+      &::before { /* css hamburger */
+        float: right;
+        position: relative;
+        width: 1em;
+        height: 1px;
+        left: -164px;
+        margin: 8px 0 0 0;
+        background: white none repeat scroll 0 0;
+        box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+        content: "";
+      }
+    }
+    & nav {
+      display: none;
+      background-color: var(--background-color);
+      padding: 0.5em 1em 1em;
+      overflow: auto;
+      overscroll-behavior: contain;
+      height: calc(100vh - 48px);
+      border-left: 1px solid #ddd;
+    }
+    &.active {
+      opacity: 1;
+      & nav { display: block; }
+    }
+    /* Make the collapsed ToC header render white on gray also when it's a link */
+    & h2 a,
+    & h2 a:is(:link, :focus, :hover),
+    & a.toplink,
+    & a.toplink:hover {
+      color: white;
+      background-color: #444;
+      text-decoration: none;
+    }
+    & a.toplink {
+      margin: 2px 0.5em 0;
+    }
+  }
+}
+
+/* TOC layout for wide screens */
+@media screen and (min-width: 930px) {
+  body {
+    padding-right: 360px;
+    padding-right: calc(min(180px + 20%, 500px));
+  }
+  #toc {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    right: calc(50vw - 480px);
+    width: 312px;
+    margin: 0;
+    padding: 0;
+    z-index: 1;
+    & h2 {
+      margin: 0;
+      padding: 0.25em 1em 1em 0;
+    }
+    & nav {
+      display: block;
+      height: calc(90vh - 84px);
+      bottom: 0;
+      padding: 0.5em 0 2em;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+    & a.toplink {
+      margin: 8px 0.5em 0;
+    }
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc {
+    page-break-before: always;
+    border-top: none;
+    padding-top: 0;
+  }
+  #n-introduction {
+    page-break-before: always;
+  }
+  figure, pre, .vcard {
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  :is(h2, h3, h4, h5, h6)+*, dd {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+}
+
+/* Dark mode. */
+@media (prefers-color-scheme: dark) {
+:root {
+  --background-color: #121212;
+  --text-color: #f0f0f0;
+  --title-color: #fff;
+  --link-color: #4da4f0;
+  --highlight-color: #282828;
+  --line-color: #444;
+  --pilcrow-weak: #444;
+  --pilcrow-strong: #666;
+  scrollbar-color: #777 #333;
+}
+}
+
+/* SVG Trick: a prefix match works because only black and white are allowed */
+svg {
+  & :is([stroke="black"], [stroke^="#000"]) {
+    stroke: var(--text-color);
+  }
+  & :is([stroke="white"], [stroke^="#fff"]) {
+    stroke: var(--background-color);
+  }
+  & :is([fill="black"], [fill^="#000"], :not([fill])) {
+    fill: var(--text-color);
+  }
+  & :is([fill="white"], [fill^="#fff"]) {
+    fill: var(--background-color);
+  }
+}
+</style>
+
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">AID</td>
+<td class="right">September 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Nemethi</td>
+<td class="center">Expires 6 March 2027</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Network Working Group</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-nemethi-dawn-aid-latest</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-09-02" class="published">2 September 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Informational</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2027-03-06">6 March 2027</time></dd>
+<dt class="label-authors">Author:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">B. Nemethi, <span class="editor">Ed.</span>
+</div>
+<div class="org">Open Agent Registry, Inc.</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">Agent Identity and Discovery (AID)</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">
+        Agent Identity and Discovery (AID) answers one question: given a domain, where is the
+        agent and which protocol should a client speak? An AID client queries a DNS TXT record at
+        the well-known subdomain _agent.&lt;domain&gt; and learns the service endpoint URI,
+        protocol token, authentication hint, and optional metadata for that agent.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">
+        This document defines the AID v2 (`aid2`) record format, client discovery algorithm,
+        exact-host lookup rules, endpoint-proof (PKA) handshake using Ed25519 HTTP Message
+        Signatures, security requirements, and IANA registrations for the `_agent` DNS node name
+        and the `agent` service name. The legacy `aid1` record format is retained as a
+        compatibility format for clients migrating from earlier deployments. AID is intentionally
+        small; after discovery, protocol-specific mechanisms such as MCP or A2A handle
+        communication and capability negotiation.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 6 March 2027.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1" class="keepWithNext"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-conventions-and-terminology" class="internal xref">Conventions and Terminology</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2.2.1">
+                <p id="section-toc.1-1.2.2.1.1" class="keepWithNext"><a href="#section-2.1" class="auto internal xref">2.1</a>.  <a href="#name-requirements-language" class="internal xref">Requirements Language</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2.2.2">
+                <p id="section-toc.1-1.2.2.2.1" class="keepWithNext"><a href="#section-2.2" class="auto internal xref">2.2</a>.  <a href="#name-terms" class="internal xref">Terms</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-aid-record-format" class="internal xref">AID Record Format</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-syntax-and-parsing" class="internal xref">Syntax and Parsing</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-defined-keys" class="internal xref">Defined Keys</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-examples" class="internal xref">Examples</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-client-discovery-procedure" class="internal xref">Client Discovery Procedure</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-discovery-algorithm" class="internal xref">Discovery Algorithm</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-standard-client-error-codes" class="internal xref">Standard Client Error Codes</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3">
+                <p id="section-toc.1-1.4.2.3.1"><a href="#section-4.3" class="auto internal xref">4.3</a>.  <a href="#name-exact-host-semantics-and-ex" class="internal xref">Exact-Host Semantics and Explicit Delegation</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-what-pka-proves" class="internal xref">What PKA Proves</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2">
+                <p id="section-toc.1-1.5.2.2.1"><a href="#section-5.2" class="auto internal xref">5.2</a>.  <a href="#name-threat-model" class="internal xref">Threat Model</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.3">
+                <p id="section-toc.1-1.5.2.3.1"><a href="#section-5.3" class="auto internal xref">5.3</a>.  <a href="#name-enterprise-policy-modes" class="internal xref">Enterprise Policy Modes</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-dns-and-caching" class="internal xref">DNS and Caching</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-rotation-stance" class="internal xref">Rotation Stance</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-why-no-multi-key-rrset-in-c" class="internal xref">Why No Multi-Key RRset in Core</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-future-rotation-profile" class="internal xref">Future Rotation Profile</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-label-strategy" class="internal xref">Label Strategy</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-registries-and-governance" class="internal xref">Registries and Governance</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1">
+                <p id="section-toc.1-1.9.2.1.1"><a href="#section-9.1" class="auto internal xref">9.1</a>.  <a href="#name-auth-tokens" class="internal xref">Auth Tokens</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.2">
+                <p id="section-toc.1-1.9.2.2.1"><a href="#section-9.2" class="auto internal xref">9.2</a>.  <a href="#name-protocol-tokens" class="internal xref">Protocol Tokens</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.1">
+                <p id="section-toc.1-1.10.2.1.1"><a href="#section-10.1" class="auto internal xref">10.1</a>.  <a href="#name-registration-in-the-undersc" class="internal xref">Registration in the Underscored and Globally Scoped DNS Node Names Registry</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.2">
+                <p id="section-toc.1-1.10.2.2.1"><a href="#section-10.2" class="auto internal xref">10.2</a>.  <a href="#name-registration-in-the-service" class="internal xref">Registration in the Service Name and Transport Protocol Port Number Registry</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#appendix-A" class="auto internal xref">Appendix A</a>.  <a href="#name-pka-handshake" class="internal xref">PKA Handshake</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.1">
+                <p id="section-toc.1-1.13.2.1.1"><a href="#appendix-A.1" class="auto internal xref">A.1</a>.  <a href="#name-key-decoding" class="internal xref">Key Decoding</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.2">
+                <p id="section-toc.1-1.13.2.2.1"><a href="#appendix-A.2" class="auto internal xref">A.2</a>.  <a href="#name-derived-keyid" class="internal xref">Derived `keyid`</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.3">
+                <p id="section-toc.1-1.13.2.3.1"><a href="#appendix-A.3" class="auto internal xref">A.3</a>.  <a href="#name-request-and-response-shape" class="internal xref">Request and Response Shape</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.4">
+                <p id="section-toc.1-1.13.2.4.1"><a href="#appendix-A.4" class="auto internal xref">A.4</a>.  <a href="#name-covered-components" class="internal xref">Covered Components</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.5">
+                <p id="section-toc.1-1.13.2.5.1"><a href="#appendix-A.5" class="auto internal xref">A.5</a>.  <a href="#name-uri-authority-and-redirects" class="internal xref">URI, Authority, and Redirects</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.6">
+                <p id="section-toc.1-1.13.2.6.1"><a href="#appendix-A.6" class="auto internal xref">A.6</a>.  <a href="#name-verifier-summary" class="internal xref">Verifier Summary</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.7">
+                <p id="section-toc.1-1.13.2.7.1"><a href="#appendix-A.7" class="auto internal xref">A.7</a>.  <a href="#name-domain-binding" class="internal xref">Domain Binding</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#appendix-B" class="auto internal xref">Appendix B</a>.  <a href="#name-well-known-fallback" class="internal xref">.well-known Fallback</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#appendix-C" class="auto internal xref"></a><a href="#name-composition-notes" class="internal xref">Composition Notes</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.1">
+                <p id="section-toc.1-1.15.2.1.1"><a href="#appendix-C.1" class="auto internal xref"></a><a href="#name-web-bot-auth" class="internal xref">Web Bot Auth</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.2">
+                <p id="section-toc.1-1.15.2.2.1"><a href="#appendix-C.2" class="auto internal xref"></a><a href="#name-authorization-and-oauth" class="internal xref">Authorization and OAuth</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.3">
+                <p id="section-toc.1-1.15.2.3.1"><a href="#appendix-C.3" class="auto internal xref"></a><a href="#name-spiffe-and-wimse" class="internal xref">SPIFFE and WIMSE</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.4">
+                <p id="section-toc.1-1.15.2.4.1"><a href="#appendix-C.4" class="auto internal xref"></a><a href="#name-relationship-to-key-address" class="internal xref">Relationship to Key-Addressed Identity Models</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16">
+            <p id="section-toc.1-1.16.1"><a href="#appendix-D" class="auto internal xref"></a><a href="#name-migration-notes" class="internal xref">Migration Notes</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16.2.1">
+                <p id="section-toc.1-1.16.2.1.1"><a href="#appendix-D.1" class="auto internal xref"></a><a href="#name-provider-migration" class="internal xref">Provider Migration</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16.2.2">
+                <p id="section-toc.1-1.16.2.2.1"><a href="#appendix-D.2" class="auto internal xref"></a><a href="#name-client-migration" class="internal xref">Client Migration</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.17">
+            <p id="section-toc.1-1.17.1"><a href="#appendix-E" class="auto internal xref"></a><a href="#name-authors-address" class="internal xref">Author's Address</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">
+        Applications that need to locate and connect to an agent often rely on out-of-band
+        configuration, centralized directories, or protocol-specific discovery mechanisms. AID
+        defines a single DNS-based bootstrap point that answers one question: given a domain,
+        where is the agent and which protocol should a client speak?<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">
+        AID uses a TXT record at the well-known DNS name _agent.&lt;domain&gt;. The record is
+        small, versioned, and protocol-agnostic. It tells a client where the agent is located,
+        which protocol token applies, what authentication hint to expect, and whether endpoint
+        proof is available.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1-3.1">Zero configuration: a user supplies a domain and the client performs discovery.<a href="#section-1-3.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-1-3.2">Decentralized deployment: the protocol uses standard DNS publication.<a href="#section-1-3.2" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-1-3.3">Protocol-agnostic bootstrap: AID identifies the next protocol, rather than replacing it.<a href="#section-1-3.3" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-1-3.4">Stable evolution path: the `_agent` label remains stable across record versions.<a href="#section-1-3.4" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-1-3.5">Endpoint proof: when a public key is published, the endpoint can prove control of the
+        matching private key using RFC 9421 HTTP Message Signatures, optionally bound to the
+        queried domain.<a href="#section-1-3.5" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-1-4">
+        This revision updates the specification from the AID v1.2 record format described in
+        <span>[<a href="#RFC-NEMETHI-AID-00" class="cite xref">RFC-NEMETHI-AID-00</a>]</span> to the current AID v2 (`aid2`) wire format: the record uses
+        an unpadded base64url Ed25519 JWK `x` value for the endpoint-proof key and an RFC 7638 JWK
+        thumbprint as the HTTP Message Signature `keyid`, removing the `kid`/`i` rotation alias
+        used by `aid1`. It also defines an optional domain-binding extension to the endpoint-proof
+        handshake that lets an endpoint signal consent to serve as the agent for the queried
+        domain. The legacy `aid1` format remains valid during a compatibility window.<a href="#section-1-4" class="pilcrow">¶</a></p>
+<p id="section-1-5">
+        This document requests two IANA registrations. The RFC 8552 registration covers the
+        deployed TXT-based discovery label `_agent`, while the RFC 6335 service-name-only
+        registration reserves `agent` for possible future SRV-based discovery under the same
+        naming family. Both registrations apply to the `_agent` label across `aid1` and `aid2`;
+        the record-version field, not the DNS node name, distinguishes wire-format revisions.<a href="#section-1-5" class="pilcrow">¶</a></p>
+<p id="section-1-6">
+        AID has been deployed since mid-2025 with client and server SDKs across six languages.
+        This document is an individual contribution, submitted for consideration alongside other
+        agent-discovery proposals under discussion in the IETF DAWN effort.<a href="#section-1-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="conventions">
+<section id="section-2">
+      <h2 id="name-conventions-and-terminology">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-conventions-and-terminology" class="section-name selfRef">Conventions and Terminology</a>
+      </h2>
+<div id="requirements-language">
+<section id="section-2.1">
+        <h3 id="name-requirements-language">
+<a href="#section-2.1" class="section-number selfRef">2.1. </a><a href="#name-requirements-language" class="section-name selfRef">Requirements Language</a>
+        </h3>
+<p id="section-2.1-1">
+          The key words "<span class="bcp14">MUST</span>", "<span class="bcp14">MUST NOT</span>",
+          "<span class="bcp14">REQUIRED</span>", "<span class="bcp14">SHALL</span>", "<span class="bcp14">SHALL NOT</span>",
+          "<span class="bcp14">SHOULD</span>", "<span class="bcp14">SHOULD NOT</span>",
+          "<span class="bcp14">RECOMMENDED</span>", "<span class="bcp14">NOT RECOMMENDED</span>",
+          "<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be
+          interpreted as described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span>
+          when, and only when, they appear in all capitals, as shown here.<a href="#section-2.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="terms">
+<section id="section-2.2">
+        <h3 id="name-terms">
+<a href="#section-2.2" class="section-number selfRef">2.2. </a><a href="#name-terms" class="section-name selfRef">Terms</a>
+        </h3>
+<span class="break"></span><dl class="dlNewline" id="section-2.2-1">
+          <dt id="section-2.2-1.1">AID Client</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.2">Software that performs AID discovery for a domain.<a href="#section-2.2-1.2" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.3">Provider</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.4">The entity that controls a domain and publishes the AID TXT record.<a href="#section-2.2-1.4" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.5">_agent subdomain</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.6">The DNS name `_agent.&lt;domain&gt;` where the canonical AID TXT record is published.<a href="#section-2.2-1.6" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.7">A-label</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.8">The Punycode representation of an Internationalized Domain Name as described in <span>[<a href="#RFC5890" class="cite xref">RFC5890</a>]</span>.<a href="#section-2.2-1.8" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.9">PKA</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.10">Public Key for Agent: the optional Ed25519 endpoint-proof key carried in the AID record.<a href="#section-2.2-1.10" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.11">JWK `x`</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.12">The base64url-encoded public key member of an Ed25519 OKP JWK, as described in <span>[<a href="#RFC8037" class="cite xref">RFC8037</a>]</span>.<a href="#section-2.2-1.12" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.13">JWK thumbprint</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.14">The RFC 7638 <span>[<a href="#RFC7638" class="cite xref">RFC7638</a>]</span> hash of a canonical JWK representation, used as the v2 HTTP Message Signature `keyid`.<a href="#section-2.2-1.14" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-2.2-1.15">Trust source</dt>
+          <dd style="margin-left: 1.5em" id="section-2.2-1.16">The source from which the selected AID record was obtained: `dns` or `well-known-tls`.<a href="#section-2.2-1.16" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="record-format">
+<section id="section-3">
+      <h2 id="name-aid-record-format">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-aid-record-format" class="section-name selfRef">AID Record Format</a>
+      </h2>
+<p id="section-3-1">
+        A provider MUST advertise its agent service by publishing a single TXT record at
+        `_agent.&lt;domain&gt;`. Providers MUST use DNS TXT records for discovery. TXT is the
+        deployed discovery record type because it is widely available across DNS providers and
+        registrars. Future versions of AID may adopt a more structured record type, but the
+        `_agent` label remains stable; see <a href="#label-strategy" class="auto internal xref">Section 8</a>.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<div id="syntax-and-parsing">
+<section id="section-3.1">
+        <h3 id="name-syntax-and-parsing">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-syntax-and-parsing" class="section-name selfRef">Syntax and Parsing</a>
+        </h3>
+<p id="section-3.1-1">
+          The record MUST be a single semicolon-delimited string of `key=value` pairs. Clients
+          SHOULD trim leading and trailing whitespace from keys and values. Clients MUST ignore
+          unknown keys unless the key has a known legacy meaning that this specification
+          explicitly rejects for `aid2`.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.1-2">
+          If a DNS server splits the TXT record into multiple 255-octet character strings, the
+          client MUST concatenate them in order before parsing. Providers SHOULD keep total
+          payload size below 255 bytes when possible.<a href="#section-3.1-2" class="pilcrow">¶</a></p>
+<p id="section-3.1-3">
+          Key comparison is case-insensitive. Clients MUST recognize the single-letter lowercase
+          alias for every defined key. A record MUST NOT include both a full key and its alias.
+          Providers SHOULD emit the short-key form for compact DNS deployment.<a href="#section-3.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="defined-keys">
+<section id="section-3.2">
+        <h3 id="name-defined-keys">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-defined-keys" class="section-name selfRef">Defined Keys</a>
+        </h3>
+<span class="break"></span><dl class="dlNewline" id="section-3.2-1">
+          <dt id="section-3.2-1.1">version (`v`) Required</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.2">Specification version. For AID v2 this MUST be `aid2`. Example: `v=aid2`.<a href="#section-3.2-1.2" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.3">uri (`u`) Required</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.4">Absolute `https://` URL for a remote agent, `wss://` for WebSocket, or a local locator. Example: `u=https://api.example.com/mcp`.<a href="#section-3.2-1.4" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.5">proto (`p`) Required</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.6">Protocol token from <a href="#proto-registry" class="auto internal xref">Section 9.2</a>. Example: `p=mcp`.<a href="#section-3.2-1.6" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.7">auth (`a`) Recommended</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.8">Authentication hint token from <a href="#auth-registry" class="auto internal xref">Section 9.1</a>. Example: `a=oauth2_code`.<a href="#section-3.2-1.8" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.9">desc (`s`) Optional</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.10">Short human-readable description. MUST be no more than 60 UTF-8 bytes. Example: `s=Primary AI Gateway`.<a href="#section-3.2-1.10" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.11">docs (`d`) Optional</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.12">Absolute `https://` URL for human-readable documentation. Example: `d=https://docs.example.com/agent`.<a href="#section-3.2-1.12" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.13">dep (`e`) Optional</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.14">ISO 8601 UTC timestamp indicating deprecation. Example: `e=2027-01-01T00:00:00Z`.<a href="#section-3.2-1.14" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-3.2-1.15">pka (`k`) Optional</dt>
+          <dd style="margin-left: 1.5em" id="section-3.2-1.16">Unpadded base64url Ed25519 public key. The value is exactly the RFC 8037 <span>[<a href="#RFC8037" class="cite xref">RFC8037</a>]</span> JWK `x` member. Example: `k=JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs`.<a href="#section-3.2-1.16" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+</dl>
+<p id="section-3.2-2">
+          AID v2 records MUST NOT use `kid` or `i` for endpoint proof. A `v=aid2` record
+          containing `kid` or `i` is invalid.<a href="#section-3.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="examples">
+<section id="section-3.3">
+        <h3 id="name-examples">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-examples" class="section-name selfRef">Examples</a>
+        </h3>
+<span id="name-remote-mcp-agent"></span><div id="example-remote-mcp">
+<figure id="figure-1">
+          <div class="lang-dns sourcecode" id="section-3.3-1.1">
+<pre>
+_agent.example.com. 300 IN TXT (
+  "v=aid2;u=https://api.example.com/mcp;"
+  "p=mcp;a=pat;s=Example AI Tools"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-1" class="selfRef">Figure 1</a>:
+<a href="#name-remote-mcp-agent" class="selfRef">Remote MCP Agent</a>
+          </figcaption></figure>
+</div>
+<span id="name-remote-mcp-with-pka"></span><div id="example-pka">
+<figure id="figure-2">
+          <div class="lang-dns sourcecode" id="section-3.3-2.1">
+<pre>
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://api.example.com/mcp;"
+  "k=JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs;"
+  "a=oauth2_code;s=Secure AI Gateway"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-2" class="selfRef">Figure 2</a>:
+<a href="#name-remote-mcp-with-pka" class="selfRef">Remote MCP with PKA</a>
+          </figcaption></figure>
+</div>
+<span id="name-websocket-agent"></span><div id="example-websocket">
+<figure id="figure-3">
+          <div class="lang-dns sourcecode" id="section-3.3-3.1">
+<pre>
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=websocket;u=wss://agent.example.com/session;"
+  "a=oauth2_code;s=Streaming Agent"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-3" class="selfRef">Figure 3</a>:
+<a href="#name-websocket-agent" class="selfRef">WebSocket Agent</a>
+          </figcaption></figure>
+</div>
+<span id="name-local-agent-via-docker"></span><div id="example-local-agent">
+<figure id="figure-4">
+          <div class="lang-dns sourcecode" id="section-3.3-4.1">
+<pre>
+_agent.grafana.com. 300 IN TXT (
+  "v=aid2;u=docker:grafana/mcp:latest;"
+  "p=local;a=pat;s=Run Grafana agent locally"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-4" class="selfRef">Figure 4</a>:
+<a href="#name-local-agent-via-docker" class="selfRef">Local Agent via Docker</a>
+          </figcaption></figure>
+</div>
+<span id="name-legacy-compatibility-during"></span><div id="example-legacy-migration">
+<figure id="figure-5">
+          <div class="lang-dns sourcecode" id="section-3.3-5.1">
+<pre>
+_agent.example.com. 300 IN TXT (
+  "v=aid1;p=mcp;u=https://api.example.com/mcp;"
+  "k=&lt;legacy-v1-multibase-key&gt;;i=g1"
+)
+_agent.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://api.example.com/mcp;"
+  "k=&lt;same-key-as-v2-base64url&gt;"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-5" class="selfRef">Figure 5</a>:
+<a href="#name-legacy-compatibility-during" class="selfRef">Legacy Compatibility During Migration</a>
+          </figcaption></figure>
+</div>
+<p id="section-3.3-6">
+          Clients that support both versions partition records by version before ambiguity
+          checks. A same-key migration from legacy `aid1` to current `aid2` is not a key rotation
+          when the decoded Ed25519 public key bytes are the same.<a href="#section-3.3-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="discovery-procedure">
+<section id="section-4">
+      <h2 id="name-client-discovery-procedure">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-client-discovery-procedure" class="section-name selfRef">Client Discovery Procedure</a>
+      </h2>
+<div id="algorithm">
+<section id="section-4.1">
+        <h3 id="name-discovery-algorithm">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-discovery-algorithm" class="section-name selfRef">Discovery Algorithm</a>
+        </h3>
+<p id="section-4.1-1">
+          When an AID client is given a domain, it MUST perform the following steps:<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-4.1-2">
+          <li id="section-4.1-2.1">Normalize the domain. If the input contains non-ASCII labels, convert them to
+          A-label form as described in <span>[<a href="#RFC5890" class="cite xref">RFC5890</a>]</span>.<a href="#section-4.1-2.1" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.2">Query the TXT record at `_agent.&lt;exact-host-user-entered&gt;`. The client MUST
+          NOT walk up the DNS hierarchy.<a href="#section-4.1-2.2" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.3">Parse the TXT answer set as semicolon-delimited `key=value` records. Key comparison
+          MUST be case-insensitive, and clients MUST recognize single-letter aliases for all
+          defined keys.<a href="#section-4.1-2.3" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.4">Validate records using versioned rules. For `aid2`, require `v`, `u`, and `p`;
+          reject a record containing both a full key and its alias; reject `kid` or `i`; and
+          reject malformed `k` values.<a href="#section-4.1-2.4" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.5">Partition valid records by AID major version.<a href="#section-4.1-2.5" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.6">Select the highest supported valid version allowed by local policy. Clients that
+          support `aid2` SHOULD prefer `aid2` over `aid1`. Within the selected version, if exactly
+          one valid record exists, use it. If more than one valid record exists, the client MUST
+          fail due to ambiguity; clients MUST NOT choose among multiple valid same-version records
+          by DNS answer order.<a href="#section-4.1-2.6" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.7">If `docs` is present, the client MAY display it. If `dep` is in the future, the
+          client SHOULD warn. If `dep` is in the past, the client SHOULD fail gracefully.<a href="#section-4.1-2.7" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.8">If `k` is present, the client MUST perform the endpoint-proof procedure in
+          <a href="#pka-handshake" class="auto internal xref">Appendix A</a>.<a href="#section-4.1-2.8" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.9">For `aid2` records, clients SHOULD request domain binding by sending the
+          `AID-Domain` header (the A-label, lowercased, portless queried host from step 1) as
+          described in <a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a>, unless local policy disables it
+          (<a href="#enterprise-policy" class="auto internal xref">Section 5.3</a>, `domain-binding=off`).<a href="#section-4.1-2.9" class="pilcrow">¶</a>
+</li>
+          <li id="section-4.1-2.10">Return the discovered endpoint, protocol, metadata, PKA state (including the
+          domain-binding indicator when domain binding was requested), and trust source.<a href="#section-4.1-2.10" class="pilcrow">¶</a>
+</li>
+        </ol>
+<p id="section-4.1-3">
+          Malformed answers do not matter when there is exactly one valid record in the selected
+          version. Returning clients that previously selected `aid2` SHOULD treat an `aid1`-only
+          result as a version downgrade.<a href="#section-4.1-3" class="pilcrow">¶</a></p>
+<p id="section-4.1-4">
+          If no DNS record is found or the DNS lookup fails, the client MAY attempt the
+          `.well-known` fallback on the same exact host; see <a href="#well-known-fallback" class="auto internal xref">Appendix B</a>.
+          If both DNS and fallback fail, discovery fails.<a href="#section-4.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="error-codes">
+<section id="section-4.2">
+        <h3 id="name-standard-client-error-codes">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-standard-client-error-codes" class="section-name selfRef">Standard Client Error Codes</a>
+        </h3>
+<p id="section-4.2-1">
+          Client implementations SHOULD use these codes to report specific failure modes.<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<span id="name-client-error-codes"></span><div id="aid-client-errors-table">
+<table class="center" id="table-1">
+          <caption>
+<a href="#table-1" class="selfRef">Table 1</a>:
+<a href="#name-client-error-codes" class="selfRef">Client Error Codes</a>
+          </caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Code</th>
+              <th class="text-left" rowspan="1" colspan="1">Name</th>
+              <th class="text-left" rowspan="1" colspan="1">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1000</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_NO_RECORD</td>
+              <td class="text-left" rowspan="1" colspan="1">No AID DNS record was found for the domain.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1001</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_INVALID_TXT</td>
+              <td class="text-left" rowspan="1" colspan="1">A record was found but is malformed, invalid, or ambiguous.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1002</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_UNSUPPORTED_PROTO</td>
+              <td class="text-left" rowspan="1" colspan="1">The record is valid, but the client does not support the selected protocol.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1003</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_SECURITY</td>
+              <td class="text-left" rowspan="1" colspan="1">Discovery failed due to a security policy or failed endpoint proof.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1004</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_DNS_LOOKUP_FAILED</td>
+              <td class="text-left" rowspan="1" colspan="1">The DNS query failed for a network-related reason.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">1005</td>
+              <td class="text-left" rowspan="1" colspan="1">ERR_FALLBACK_FAILED</td>
+              <td class="text-left" rowspan="1" colspan="1">The `.well-known` fallback failed or returned invalid data.</td>
+            </tr>
+          </tbody>
+        </table>
+</div>
+</section>
+</div>
+<div id="exact-host">
+<section id="section-4.3">
+        <h3 id="name-exact-host-semantics-and-ex">
+<a href="#section-4.3" class="section-number selfRef">4.3. </a><a href="#name-exact-host-semantics-and-ex" class="section-name selfRef">Exact-Host Semantics and Explicit Delegation</a>
+        </h3>
+<p id="section-4.3-1">
+          Discovery is exact-host by default. If the application asks for `app.team.example.com`,
+          the canonical AID query name is `_agent.app.team.example.com`.<a href="#section-4.3-1" class="pilcrow">¶</a></p>
+<p id="section-4.3-2">
+          Clients MUST NOT walk up the DNS hierarchy looking for `_agent.team.example.com` or
+          `_agent.example.com`. If an operator wants a child host to inherit a shared record, that
+          inheritance MUST be expressed in DNS for the exact queried name, for example by using a
+          `CNAME` at the child host's `_agent` label.<a href="#section-4.3-2" class="pilcrow">¶</a></p>
+<span id="name-exact-host-and-delegated-ex"></span><div id="example-exact-host">
+<figure id="figure-6">
+          <div class="lang-dns sourcecode" id="section-4.3-3.1">
+<pre>
+_agent.app.team.example.com. 300 IN CNAME (
+  _agent.shared.team.example.com.
+)
+_agent.shared.team.example.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://gateway.team.example.com/mcp;"
+  "k=&lt;current-key&gt;"
+)
+</pre>
+</div>
+<figcaption><a href="#figure-6" class="selfRef">Figure 6</a>:
+<a href="#name-exact-host-and-delegated-ex" class="selfRef">Exact-Host and Delegated Examples</a>
+          </figcaption></figure>
+</div>
+<p id="section-4.3-4">
+          The canonical v2 location is the base record `_agent.&lt;domain&gt;`. Providers MAY
+          additionally publish protocol-specific names such as `_agent._mcp.&lt;domain&gt;` or
+          `_agent._a2a.&lt;domain&gt;` for legacy clients, diagnostics, or explicitly configured
+          base-failure probing. Protocol-specific names, when used, always use the underscore form
+          `_agent._&lt;proto&gt;.&lt;domain&gt;`; clients MUST NOT perform a compatibility lookup
+          at `_agent.&lt;proto&gt;.&lt;domain&gt;`.<a href="#section-4.3-4" class="pilcrow">¶</a></p>
+<p id="section-4.3-5">
+          When an application explicitly requests a protocol, v2 clients still query the
+          canonical base name `_agent.&lt;exact-host-user-entered&gt;` first and filter that
+          record for the requested protocol. Protocol-prefixed probing is legacy, diagnostic, or
+          base-failure-only behavior where supported and explicitly configured. Clients MUST NOT
+          query parent hosts implicitly in either lookup form.<a href="#section-4.3-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="security">
+<section id="section-5">
+      <h2 id="name-security-considerations">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<p id="section-5-1">
+        AID publishes public discovery metadata. The TXT record MUST NOT contain secrets. The
+        protocol depends on DNS integrity, TLS for remote endpoints, and explicit client
+        safeguards for local execution.<a href="#section-5-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5-2.1">Providers SHOULD sign AID records with DNSSEC when available. Clients SHOULD perform
+        DNSSEC validation when DNSSEC-signed answers are available.<a href="#section-5-2.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-5-2.2">A remote agent's `uri` MUST use `https://`, except `proto=websocket` which MUST use
+        `wss://`. Clients MUST perform standard TLS certificate and hostname validation as
+        described in <span>[<a href="#RFC9525" class="cite xref">RFC9525</a>]</span>.<a href="#section-5-2.2" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-5-2.3">When `k` is present, clients MUST verify endpoint proof as described in
+        <a href="#pka-handshake" class="auto internal xref">Appendix A</a>.<a href="#section-5-2.3" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-5-2.4">Clients that support `proto=local` MUST implement the safeguards described below.<a href="#section-5-2.4" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-5-2.5">Clients MUST NOT automatically follow cross-origin redirects from a discovered
+        endpoint without policy approval or user confirmation.<a href="#section-5-2.5" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-5-3">
+        Clients that support `proto=local` MUST implement the following safeguards:<a href="#section-5-3" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-5-4">
+        <li id="section-5-4.1">Explicit consent: before first execution, the client MUST display the full resolved
+        command and require explicit confirmation.<a href="#section-5-4.1" class="pilcrow">¶</a>
+</li>
+        <li id="section-5-4.2">Integrity check: the client MUST compute and cache a cryptographic fingerprint of the
+        `uri` and `proto` values. If these values change on a later lookup, the client MUST
+        re-trigger the full consent process.<a href="#section-5-4.2" class="pilcrow">¶</a>
+</li>
+        <li id="section-5-4.3">No shell interpretation: arguments derived from the `uri` MUST be passed atomically to
+        the underlying OS execution call to prevent command injection.<a href="#section-5-4.3" class="pilcrow">¶</a>
+</li>
+        <li id="section-5-4.4">No nested discovery: the client MUST reject a `local` execution `uri` that could be
+        interpreted as a command that initiates another AID discovery request.<a href="#section-5-4.4" class="pilcrow">¶</a>
+</li>
+        <li id="section-5-4.5">Sandboxing: clients SHOULD run local agents in a sandboxed environment with minimum
+        necessary permissions.<a href="#section-5-4.5" class="pilcrow">¶</a>
+</li>
+      </ol>
+<p id="section-5-5">
+        If an initial request to the discovered `uri` returns an HTTP redirect (`301`, `302`,
+        `307`, or `308`) to a different origin, clients SHOULD treat this as a potential security
+        risk. Clients MUST NOT follow such cross-origin redirects automatically. Implementations
+        MAY either terminate with `ERR_SECURITY` or require explicit user confirmation before
+        proceeding. Clients MUST NOT follow redirects during PKA verification or `.well-known`
+        fallback.<a href="#section-5-5" class="pilcrow">¶</a></p>
+<div id="what-pka-proves">
+<section id="section-5.1">
+        <h3 id="name-what-pka-proves">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-what-pka-proves" class="section-name selfRef">What PKA Proves</a>
+        </h3>
+<p id="section-5.1-1">
+          PKA proves exactly this: the endpoint reached at the discovered URI controls the
+          Ed25519 private key corresponding to the public key currently published in the domain's
+          selected AID record.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
+<p id="section-5.1-2">
+          PKA does not prove: that a user authorized a specific action; that an OAuth token is
+          valid; that a SPIFFE SVID belongs to a trust domain; that an internal
+          policy engine approved a request; that a key change is cryptographically continuous with
+          a previous key; or that the endpoint consents to serve as the agent for the queried
+          domain.<a href="#section-5.1-2" class="pilcrow">¶</a></p>
+<p id="section-5.1-3">
+          Because the response signature binds only the endpoint's own request context, any
+          domain can publish a record containing another operator's endpoint URI and public key,
+          and the endpoint proof still verifies. This unauthorized-association gap does not let
+          the publishing domain impersonate the endpoint, but it falsely implies a relationship
+          between the domain and the endpoint. Clients that need the endpoint's consent to the
+          association use the domain-binding profile in <a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a>; v2
+          clients SHOULD request this by default.<a href="#section-5.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="threat-model">
+<section id="section-5.2">
+        <h3 id="name-threat-model">
+<a href="#section-5.2" class="section-number selfRef">5.2. </a><a href="#name-threat-model" class="section-name selfRef">Threat Model</a>
+        </h3>
+<p id="section-5.2-1">
+          AID's security model addresses the following threat landscape.<a href="#section-5.2-1" class="pilcrow">¶</a></p>
+<p id="section-5.2-2">Assumptions:<a href="#section-5.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-3.1">DNS resolvers are trusted for transport unless a client requires DNSSEC.<a href="#section-5.2-3.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-3.2">HTTPS endpoints are verified through standard TLS certificate validation.<a href="#section-5.2-3.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-3.3">The TXT record is public data; no secrets are transmitted through DNS.<a href="#section-5.2-3.3" class="pilcrow">¶</a>
+</li>
+        </ul>
+<p id="section-5.2-4">Mitigations provided:<a href="#section-5.2-4" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-5.1">DNS spoofing or cache poisoning: DNSSEC validation, when available.<a href="#section-5.2-5.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.2">Endpoint impersonation: PKA endpoint proof with Ed25519 HTTP Message Signatures.<a href="#section-5.2-5.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.3">Unauthorized association: the domain-binding profile
+          (<a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a>), which v2 clients SHOULD request by default. This
+          mitigation applies only when a client requires domain binding; merely requesting it does
+          not stop an attacker-controlled endpoint from returning a valid unbound proof.<a href="#section-5.2-5.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.4">PKA removal or key replacement: returning clients can detect changes when they
+          retain previous security state.<a href="#section-5.2-5.4" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.5">Version downgrade: returning clients can detect `aid2` to `aid1` downgrade when they
+          retain previous version state.<a href="#section-5.2-5.5" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.6">Command injection in local agents: local execution safeguards.<a href="#section-5.2-5.6" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-5.7">Cross-origin redirects: PKA redirects are rejected, and cross-origin protocol
+          redirects are not automatic.<a href="#section-5.2-5.7" class="pilcrow">¶</a>
+</li>
+        </ul>
+<p id="section-5.2-6">Explicitly out of scope:<a href="#section-5.2-6" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-7.1">Compromised authoritative DNS servers beyond DNSSEC.<a href="#section-5.2-7.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-7.2">Active attackers after TLS validation fails.<a href="#section-5.2-7.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-7.3">Authorization, delegation, user consent, reputation, or workload federation.<a href="#section-5.2-7.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.2-7.4">Managed cryptographic rotation in the core DNS record.<a href="#section-5.2-7.4" class="pilcrow">¶</a>
+</li>
+        </ul>
+</section>
+</div>
+<div id="enterprise-policy">
+<section id="section-5.3">
+        <h3 id="name-enterprise-policy-modes">
+<a href="#section-5.3" class="section-number selfRef">5.3. </a><a href="#name-enterprise-policy-modes" class="section-name selfRef">Enterprise Policy Modes</a>
+        </h3>
+<p id="section-5.3-1">
+          Clients that expose enterprise controls SHOULD provide policy presets and MAY expose the
+          underlying policy knobs directly.<a href="#section-5.3-1" class="pilcrow">¶</a></p>
+<span id="name-normative-policy-presets"></span><div id="aid-policy-presets-table">
+<table class="center" id="table-2">
+          <caption>
+<a href="#table-2" class="selfRef">Table 2</a>:
+<a href="#name-normative-policy-presets" class="selfRef">Normative Policy Presets</a>
+          </caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Preset</th>
+              <th class="text-left" rowspan="1" colspan="1">PKA</th>
+              <th class="text-left" rowspan="1" colspan="1">DNSSEC</th>
+              <th class="text-left" rowspan="1" colspan="1">Well-known</th>
+              <th class="text-left" rowspan="1" colspan="1">Downgrade</th>
+              <th class="text-left" rowspan="1" colspan="1">Domain binding</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">balanced</td>
+              <td class="text-left" rowspan="1" colspan="1">if-present</td>
+              <td class="text-left" rowspan="1" colspan="1">prefer</td>
+              <td class="text-left" rowspan="1" colspan="1">auto</td>
+              <td class="text-left" rowspan="1" colspan="1">warn</td>
+              <td class="text-left" rowspan="1" colspan="1">prefer</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">strict</td>
+              <td class="text-left" rowspan="1" colspan="1">require</td>
+              <td class="text-left" rowspan="1" colspan="1">require</td>
+              <td class="text-left" rowspan="1" colspan="1">disable</td>
+              <td class="text-left" rowspan="1" colspan="1">fail</td>
+              <td class="text-left" rowspan="1" colspan="1">require</td>
+            </tr>
+          </tbody>
+        </table>
+</div>
+<p id="section-5.3-3">
+          The underlying policy knobs are:<a href="#section-5.3-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-4.1">PKA policy: `if-present | require`<a href="#section-5.3-4.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-4.2">DNSSEC policy: `off | prefer | require`<a href="#section-5.3-4.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-4.3">Well-known policy: `auto | disable`<a href="#section-5.3-4.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-4.4">Downgrade policy: `off | warn | fail`<a href="#section-5.3-4.4" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-4.5">Domain-binding policy: `off | prefer | require`<a href="#section-5.3-4.5" class="pilcrow">¶</a>
+</li>
+        </ul>
+<p id="section-5.3-5">
+          Policy semantics are as follows:<a href="#section-5.3-5" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-6.1">PKA `require`: discovery MUST fail with `ERR_SECURITY` if the selected record does
+          not publish `k`.<a href="#section-5.3-6.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.2">DNSSEC `prefer`: clients SHOULD continue when DNSSEC cannot be validated, but SHOULD
+          surface a warning.<a href="#section-5.3-6.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.3">DNSSEC `require`: clients MUST fail with `ERR_SECURITY` when DNSSEC validation is
+          unavailable or unsuccessful for the selected DNS answer.<a href="#section-5.3-6.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.4">Well-known `disable`: clients MUST NOT use `/.well-known/agent` fallback.<a href="#section-5.3-6.4" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.5">Downgrade `warn`: if a previously seen `k` disappears or changes, clients SHOULD
+          surface a warning. This also applies to an `aid2` to `aid1` downgrade.<a href="#section-5.3-6.5" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.6">Downgrade `fail`: if a previously seen `k` disappears or changes, clients MUST fail
+          with `ERR_SECURITY`. This also applies to an `aid2` to `aid1` downgrade.<a href="#section-5.3-6.6" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.7">Domain-binding `off`: the client does not send `AID-Domain` on PKA requests.<a href="#section-5.3-6.7" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.8">Domain-binding `prefer` (default): the client sends `AID-Domain`. A domain-bound
+          proof (one whose covered set includes `"aid-domain";req`) is recorded as such; an
+          unbound proof is still accepted. `prefer` records the outcome but does not enforce
+          it.<a href="#section-5.3-6.8" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-5.3-6.9">Domain-binding `require`: when an endpoint proof is performed for a record
+          containing `k`, discovery fails unless the proof is domain-bound. This is the only mode
+          that mitigates unauthorized association (<a href="#what-pka-proves" class="auto internal xref">Section 5.1</a>,
+          <a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a>); merely sending `AID-Domain` does not. Has no
+          effect when no `k` is present or PKA yields no proof. `pka=require` and
+          `domain-binding=require` compose: `pka=require` fails first when `k` is absent, then
+          `domain-binding=require` enforces binding on the resulting proof.<a href="#section-5.3-6.9" class="pilcrow">¶</a>
+</li>
+        </ul>
+<p id="section-5.3-7">
+          When a record is discovered through the `.well-known` fallback
+          (`trustSource=well-known-tls`; see <a href="#well-known-fallback" class="auto internal xref">Appendix B</a>), the queried
+          host and the TLS-validated host are the same origin, so an `AID-Domain` binding there is
+          largely redundant with TLS host validation. Clients still send `AID-Domain` and
+          `domain-binding=require` still enforces, but the binding adds little beyond TLS in that
+          path.<a href="#section-5.3-7" class="pilcrow">¶</a></p>
+<p id="section-5.3-8">
+          If discovery succeeds only through `.well-known`, the result cannot satisfy
+          `dnssec=require`.<a href="#section-5.3-8" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="dns-caching">
+<section id="section-6">
+      <h2 id="name-dns-and-caching">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-dns-and-caching" class="section-name selfRef">DNS and Caching</a>
+      </h2>
+<p id="section-6-1">
+        Providers are RECOMMENDED to publish `_agent` TXT records with a TTL between 300 and 900
+        seconds. Clients MUST respect the received TTL and MUST NOT cache the record longer than
+        that.<a href="#section-6-1" class="pilcrow">¶</a></p>
+<p id="section-6-2">
+        PKA responses are separate from DNS records. A nonce-bound PKA response MUST include
+        `Cache-Control: no-store`. Clients SHOULD also send `Cache-Control: no-store` on PKA
+        requests.<a href="#section-6-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rotation-stance">
+<section id="section-7">
+      <h2 id="name-rotation-stance">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-rotation-stance" class="section-name selfRef">Rotation Stance</a>
+      </h2>
+<p id="section-7-1">
+        AID v2 core does not define DNS-level cryptographic key rotation. The core record says,
+        for example:<a href="#section-7-1" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-7-2">
+<pre>
+_agent.acme.com TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=&lt;current-key&gt;"
+)
+</pre><a href="#section-7-2" class="pilcrow">¶</a>
+</div>
+<p id="section-7-3">That means:<a href="#section-7-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7-4.1">DNS currently publishes this endpoint and this key.<a href="#section-7-4.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-7-4.2">The endpoint can prove possession of the corresponding private key.<a href="#section-7-4.2" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-7-4.3">Verifiers can derive stable key identity from `k`.<a href="#section-7-4.3" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-7-5">It does not mean:<a href="#section-7-5" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7-6.1">The new key is authorized by the old key.<a href="#section-7-6.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-7-6.2">Multiple keys are active through DNS.<a href="#section-7-6.2" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-7-6.3">DNS provides validity windows.<a href="#section-7-6.3" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-7-6.4">AID core provides request provenance or delegated signing infrastructure.<a href="#section-7-6.4" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-7-7">
+        If the key changes, the key changed. Clients with previous state decide whether to warn,
+        fail, or accept according to local policy (<a href="#enterprise-policy" class="auto internal xref">Section 5.3</a>).<a href="#section-7-7" class="pilcrow">¶</a></p>
+<div id="no-multi-key-rrset">
+<section id="section-7.1">
+        <h3 id="name-why-no-multi-key-rrset-in-c">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-why-no-multi-key-rrset-in-c" class="section-name selfRef">Why No Multi-Key RRset in Core</a>
+        </h3>
+<p id="section-7.1-1">
+          A shape such as the following is not valid in v2 core:<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-7.1-2">
+<pre>
+_agent.acme.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=&lt;old-key&gt;"
+)
+_agent.acme.com. 300 IN TXT (
+  "v=aid2;p=mcp;u=https://agent.acme.com/mcp;"
+  "k=&lt;new-key&gt;"
+)
+</pre><a href="#section-7.1-2" class="pilcrow">¶</a>
+</div>
+<p id="section-7.1-3">
+          It changes the model from a domain resolving to one selected endpoint record with an
+          optional proof key, to a domain resolving to one selected endpoint descriptor with an
+          active key set from which a response `keyid` selects a key. That requires rules for
+          normalized non-key field equivalence, duplicate handling, partial DNS propagation,
+          key-set pinning, downgrade policy, SDK return types, and conformance fixtures. It also
+          does not solve lost-key or compromised-key recovery.<a href="#section-7.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="future-rotation-profile">
+<section id="section-7.2">
+        <h3 id="name-future-rotation-profile">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-future-rotation-profile" class="section-name selfRef">Future Rotation Profile</a>
+        </h3>
+<p id="section-7.2-1">
+          If AID later needs managed rotation for pinned clients or provenance profiles, that
+          should be a separate HTTP key-directory profile, likely using JWKS or Web Bot Auth
+          style overlap:<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-7.2-2">
+<pre>
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "kid": "&lt;jwk-thumbprint&gt;",
+      "x": "&lt;public-key&gt;",
+      "use": "sig",
+      "nbf": 1712793600,
+      "exp": 1715385600
+    }
+  ]
+}
+</pre><a href="#section-7.2-2" class="pilcrow">¶</a>
+</div>
+<p id="section-7.2-3">
+          If such a directory chains to DNS `k`, that chaining is the defining property of an
+          AID-anchored key directory. If it does not chain to DNS `k`, it is a normal external key
+          directory outside AID core.<a href="#section-7.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="label-strategy">
+<section id="section-8">
+      <h2 id="name-label-strategy">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-label-strategy" class="section-name selfRef">Label Strategy</a>
+      </h2>
+<p id="section-8-1">
+        AID v2 keeps `_agent.&lt;domain&gt;` as the discovery label for compatibility with
+        existing deployments. The stable DNS label for AID is `_agent`. Record formats may evolve,
+        but the discovery label remains `_agent` across versions, and the record version field
+        identifies the wire-format expectations. This is the main reason the RFC 8552
+        registration is valuable even if a later AID version uses a different DNS RR type.<a href="#section-8-1" class="pilcrow">¶</a></p>
+<p id="section-8-2">
+        Label governance beyond the v2 key-format and endpoint-proof updates defined in this
+        document may be addressed by a future working group process.<a href="#section-8-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="registries-governance">
+<section id="section-9">
+      <h2 id="name-registries-and-governance">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-registries-and-governance" class="section-name selfRef">Registries and Governance</a>
+      </h2>
+<p id="section-9-1">
+        To support interoperability, token registries and community resources are maintained
+        publicly. The auth and protocol registries remain compatible with legacy `aid1` records
+        unless changed through the normal extension process.<a href="#section-9-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9-2.1">Token registries: the canonical lists for `auth` and `proto` tokens are maintained as
+        machine-readable constants at
+        <a href="https://github.com/agentcommunity/agent-identity-discovery">https://github.com/agentcommunity/agent-identity-discovery</a>,
+        generated into per-language SDK constants. Additions are proposed as an issue describing
+        motivation, examples, security implications, and backward compatibility, followed by a
+        pull request; changes with security implications require review before merging.<a href="#section-9-2.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="section-9-2.2">Global index: an open DNS crawler and community dashboard showing AID adoption is
+        maintained at
+        <a href="https://github.com/agentcommunity/aid-registry">https://github.com/agentcommunity/aid-registry</a>.<a href="#section-9-2.2" class="pilcrow">¶</a>
+</li>
+      </ul>
+<div id="auth-registry">
+<section id="section-9.1">
+        <h3 id="name-auth-tokens">
+<a href="#section-9.1" class="section-number selfRef">9.1. </a><a href="#name-auth-tokens" class="section-name selfRef">Auth Tokens</a>
+        </h3>
+<p id="section-9.1-1">All authentication tokens are case-sensitive and use lowercase ASCII.<a href="#section-9.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9.1-2.1">none<a href="#section-9.1-2.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.2">pat<a href="#section-9.1-2.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.3">apikey<a href="#section-9.1-2.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.4">basic<a href="#section-9.1-2.4" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.5">oauth2_device<a href="#section-9.1-2.5" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.6">oauth2_code<a href="#section-9.1-2.6" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.7">mtls<a href="#section-9.1-2.7" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="section-9.1-2.8">custom<a href="#section-9.1-2.8" class="pilcrow">¶</a>
+</li>
+        </ul>
+</section>
+</div>
+<div id="proto-registry">
+<section id="section-9.2">
+        <h3 id="name-protocol-tokens">
+<a href="#section-9.2" class="section-number selfRef">9.2. </a><a href="#name-protocol-tokens" class="section-name selfRef">Protocol Tokens</a>
+        </h3>
+<p id="section-9.2-1">All protocol tokens are case-sensitive and use lowercase ASCII.<a href="#section-9.2-1" class="pilcrow">¶</a></p>
+<span id="name-protocol-tokens-2"></span><div id="aid-proto-registry-table">
+<table class="center" id="table-3">
+          <caption>
+<a href="#table-3" class="selfRef">Table 3</a>:
+<a href="#name-protocol-tokens-2" class="selfRef">Protocol Tokens</a>
+          </caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Token</th>
+              <th class="text-left" rowspan="1" colspan="1">Meaning</th>
+              <th class="text-left" rowspan="1" colspan="1">Allowed `uri` scheme(s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">mcp</td>
+              <td class="text-left" rowspan="1" colspan="1">Model Context Protocol</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">a2a</td>
+              <td class="text-left" rowspan="1" colspan="1">Agent-to-Agent Protocol</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">openapi</td>
+              <td class="text-left" rowspan="1" colspan="1">OpenAPI specification document</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">grpc</td>
+              <td class="text-left" rowspan="1" colspan="1">gRPC over HTTP/2 or HTTP/3</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">graphql</td>
+              <td class="text-left" rowspan="1" colspan="1">GraphQL over HTTP</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">websocket</td>
+              <td class="text-left" rowspan="1" colspan="1">WebSocket transport</td>
+              <td class="text-left" rowspan="1" colspan="1">wss://</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">local</td>
+              <td class="text-left" rowspan="1" colspan="1">The agent runs locally on the client machine</td>
+              <td class="text-left" rowspan="1" colspan="1">docker:, npx:, pip:</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">zeroconf</td>
+              <td class="text-left" rowspan="1" colspan="1">mDNS or DNS-SD service discovery</td>
+              <td class="text-left" rowspan="1" colspan="1">zeroconf:&lt;service_type&gt;</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">ucp</td>
+              <td class="text-left" rowspan="1" colspan="1">Universal Commerce Protocol</td>
+              <td class="text-left" rowspan="1" colspan="1">https://</td>
+            </tr>
+          </tbody>
+        </table>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="iana">
+<section id="section-10">
+      <h2 id="name-iana-considerations">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<p id="section-10-1">
+        This document requests registration in two IANA registries. The registrations serve
+        different purposes. The RFC 8552 request covers AID TXT discovery at
+        `_agent.&lt;domain&gt;`, applicable across the `aid1` and `aid2` record versions defined
+        in this document. The RFC 6335 request reserves the service name `agent` for potential
+        future DNS service discovery usage under `_agent._tcp.&lt;domain&gt;`.<a href="#section-10-1" class="pilcrow">¶</a></p>
+<div id="iana-rfc8552">
+<section id="section-10.1">
+        <h3 id="name-registration-in-the-undersc">
+<a href="#section-10.1" class="section-number selfRef">10.1. </a><a href="#name-registration-in-the-undersc" class="section-name selfRef">Registration in the Underscored and Globally Scoped DNS Node Names Registry</a>
+        </h3>
+<p id="section-10.1-1">
+          IANA is requested to register the following entry in the "Underscored and Globally
+          Scoped DNS Node Names" registry established by <span>[<a href="#RFC8552" class="cite xref">RFC8552</a>]</span>.<a href="#section-10.1-1" class="pilcrow">¶</a></p>
+<span id="name-requested-rfc-8552-registra"></span><div id="aid-iana-rfc8552-table">
+<table class="center" id="table-4">
+          <caption>
+<a href="#table-4" class="selfRef">Table 4</a>:
+<a href="#name-requested-rfc-8552-registra" class="selfRef">Requested RFC 8552 Registration</a>
+          </caption>
+<tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">RR Type</td>
+              <td class="text-left" rowspan="1" colspan="1">TXT</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Node Name</td>
+              <td class="text-left" rowspan="1" colspan="1">_agent</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Reference</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+          </tbody>
+        </table>
+</div>
+<p id="section-10.1-3">
+          The `_agent` node name is used exclusively for Agent Identity and Discovery. A single
+          TXT record published at `_agent.&lt;domain&gt;` contains semicolon-delimited key/value
+          pairs that identify an agent endpoint, protocol token, and optional metadata as defined
+          in <a href="#record-format" class="auto internal xref">Section 3</a> and <a href="#discovery-procedure" class="auto internal xref">Section 4</a>.<a href="#section-10.1-3" class="pilcrow">¶</a></p>
+<p id="section-10.1-4">
+          The requested node name is specific to AID and does not reserve the broader concept of
+          agents or agent-related discovery generally. Protocol-specific labels of the form
+          `_agent._&lt;proto&gt;.&lt;domain&gt;` are subordinate names beneath the registered
+          `_agent` node and do not require separate global registration.<a href="#section-10.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="iana-rfc6335">
+<section id="section-10.2">
+        <h3 id="name-registration-in-the-service">
+<a href="#section-10.2" class="section-number selfRef">10.2. </a><a href="#name-registration-in-the-service" class="section-name selfRef">Registration in the Service Name and Transport Protocol Port Number Registry</a>
+        </h3>
+<p id="section-10.2-1">
+          IANA is requested to register the following service-name-only entry in the "Service
+          Name and Transport Protocol Port Number" registry defined by <span>[<a href="#RFC6335" class="cite xref">RFC6335</a>]</span>.<a href="#section-10.2-1" class="pilcrow">¶</a></p>
+<span id="name-requested-rfc-6335-registra"></span><div id="aid-iana-rfc6335-table">
+<table class="center" id="table-5">
+          <caption>
+<a href="#table-5" class="selfRef">Table 5</a>:
+<a href="#name-requested-rfc-6335-registra" class="selfRef">Requested RFC 6335 Registration</a>
+          </caption>
+<tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Service Name</td>
+              <td class="text-left" rowspan="1" colspan="1">agent</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Transport Protocol(s)</td>
+              <td class="text-left" rowspan="1" colspan="1">tcp</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Description</td>
+              <td class="text-left" rowspan="1" colspan="1">Agent Identity and Discovery (AID): DNS-based discovery of agent service endpoints</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Port Number</td>
+              <td class="text-left" rowspan="1" colspan="1">N/A</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Assignment Notes</td>
+              <td class="text-left" rowspan="1" colspan="1">No port number is requested. This is a service-name-only registration intended
+              to establish `agent` for possible future SRV-based discovery under
+              `_agent._tcp.&lt;domain&gt;` while preserving the stable `_agent` label.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Reference</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+          </tbody>
+        </table>
+</div>
+</section>
+</div>
+</section>
+</div>
+<section id="section-11">
+      <h2 id="name-normative-references">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+      </h2>
+<dl class="references">
+<dt id="RFC2119">[RFC2119]</dt>
+      <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">RFC 2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC5890">[RFC5890]</dt>
+      <dd>
+<span class="refAuthor">Klensin, J.</span>, <span class="refTitle">"Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework"</span>, <span class="seriesInfo">RFC 5890</span>, <time datetime="2010-08" class="refDate">August 2010</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc5890">https://www.rfc-editor.org/rfc/rfc5890</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6335">[RFC6335]</dt>
+      <dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refTitle">"Internet Assigned Numbers Authority (IANA) Procedures for the Management of the Service Name and Transport Protocol Port Number Registry"</span>, <span class="seriesInfo">RFC 6335</span>, <time datetime="2011-08" class="refDate">August 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6335">https://www.rfc-editor.org/rfc/rfc6335</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7638">[RFC7638]</dt>
+      <dd>
+<span class="refAuthor">Jones, M.</span> and <span class="refAuthor">N. Sakimura</span>, <span class="refTitle">"JSON Web Key (JWK) Thumbprint"</span>, <span class="seriesInfo">RFC 7638</span>, <span class="seriesInfo">DOI 10.17487/RFC7638</span>, <time datetime="2015-09" class="refDate">September 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc7638">https://www.rfc-editor.org/info/rfc7638</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8037">[RFC8037]</dt>
+      <dd>
+<span class="refAuthor">Liusvaara, I.</span>, <span class="refTitle">"CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JSON Object Signing and Encryption (JOSE)"</span>, <span class="seriesInfo">RFC 8037</span>, <span class="seriesInfo">DOI 10.17487/RFC8037</span>, <time datetime="2017-01" class="refDate">January 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8037">https://www.rfc-editor.org/info/rfc8037</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+      <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">RFC 8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8552">[RFC8552]</dt>
+      <dd>
+<span class="refAuthor">Sullivan, A.</span>, <span class="refTitle">"Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves"</span>, <span class="seriesInfo">RFC 8552</span>, <time datetime="2019-03" class="refDate">March 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8552">https://www.rfc-editor.org/rfc/rfc8552</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9421">[RFC9421]</dt>
+      <dd>
+<span class="refAuthor">Backman, A.</span>, <span class="refAuthor">Richer, J.</span>, and <span class="refAuthor">M. Sporny</span>, <span class="refTitle">"HTTP Message Signatures"</span>, <span class="seriesInfo">RFC 9421</span>, <time datetime="2024-02" class="refDate">February 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9421">https://www.rfc-editor.org/rfc/rfc9421</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9525">[RFC9525]</dt>
+    <dd>
+<span class="refAuthor">Saint-Andre, P.</span> and <span class="refAuthor">R. Salz</span>, <span class="refTitle">"Service Identity in TLS"</span>, <span class="seriesInfo">RFC 9525</span>, <time datetime="2023-11" class="refDate">November 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9525">https://www.rfc-editor.org/rfc/rfc9525</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+<section id="section-12">
+      <h2 id="name-informative-references">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+      </h2>
+<dl class="references">
+<dt id="RFC8414">[RFC8414]</dt>
+      <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refAuthor">Sakimura, N.</span>, and <span class="refAuthor">J. Bradley</span>, <span class="refTitle">"OAuth 2.0 Authorization Server Metadata"</span>, <span class="seriesInfo">RFC 8414</span>, <span class="seriesInfo">DOI 10.17487/RFC8414</span>, <time datetime="2018-06" class="refDate">June 2018</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8414">https://www.rfc-editor.org/info/rfc8414</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8615">[RFC8615]</dt>
+      <dd>
+<span class="refAuthor">Nottingham, M.</span>, <span class="refTitle">"Well-Known Uniform Resource Identifiers (URIs)"</span>, <span class="seriesInfo">RFC 8615</span>, <time datetime="2019-05" class="refDate">May 2019</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8615">https://www.rfc-editor.org/rfc/rfc8615</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9728">[RFC9728]</dt>
+      <dd>
+<span class="refAuthor">Jones, M.B.</span>, <span class="refAuthor">Hunt, P.</span>, and <span class="refAuthor">A. Parecki</span>, <span class="refTitle">"OAuth 2.0 Protected Resource Metadata"</span>, <span class="seriesInfo">RFC 9728</span>, <span class="seriesInfo">DOI 10.17487/RFC9728</span>, <time datetime="2025-04" class="refDate">April 2025</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc9728">https://www.rfc-editor.org/info/rfc9728</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC-NEMETHI-AID-00">[RFC-NEMETHI-AID-00]</dt>
+    <dd>
+<span class="refAuthor">Nemethi, B.</span>, <span class="refTitle">"Agent Identity and Discovery (AID)"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-nemethi-aid-agent-identity-discovery-00</span>, <time datetime="2026-03" class="refDate">March 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/html/draft-nemethi-aid-agent-identity-discovery-00">https://datatracker.ietf.org/doc/html/draft-nemethi-aid-agent-identity-discovery-00</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+<div id="pka-handshake">
+<section id="appendix-A">
+      <h2 id="name-pka-handshake">
+<a href="#appendix-A" class="section-number selfRef">Appendix A. </a><a href="#name-pka-handshake" class="section-name selfRef">PKA Handshake</a>
+      </h2>
+<p id="appendix-A-1">
+        When `k` is present, clients MUST verify endpoint proof using HTTP Message Signatures
+        with Ed25519.<a href="#appendix-A-1" class="pilcrow">¶</a></p>
+<div id="key-decoding">
+<section id="appendix-A.1">
+        <h3 id="name-key-decoding">
+<a href="#appendix-A.1" class="section-number selfRef">A.1. </a><a href="#name-key-decoding" class="section-name selfRef">Key Decoding</a>
+        </h3>
+<p id="appendix-A.1-1">
+          For v2, `k` MUST be unpadded base64url. Decoding MUST produce exactly 32 octets. Legacy
+          `z...` multibase keys MUST NOT be accepted in `v=aid2`. The corresponding JWK is:<a href="#appendix-A.1-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="appendix-A.1-2">
+<pre>
+{ "kty": "OKP", "crv": "Ed25519", "x": "&lt;k&gt;" }
+</pre><a href="#appendix-A.1-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="derived-keyid">
+<section id="appendix-A.2">
+        <h3 id="name-derived-keyid">
+<a href="#appendix-A.2" class="section-number selfRef">A.2. </a><a href="#name-derived-keyid" class="section-name selfRef">Derived `keyid`</a>
+        </h3>
+<p id="appendix-A.2-1">
+          The expected HTTP Message Signature `keyid` is the RFC 7638 <span>[<a href="#RFC7638" class="cite xref">RFC7638</a>]</span> JWK
+          thumbprint using SHA-256 over this exact UTF-8 JSON serialization, with no extra spaces:<a href="#appendix-A.2-1" class="pilcrow">¶</a></p>
+<div class="lang-text sourcecode" id="appendix-A.2-2">
+<pre>
+{"crv":"Ed25519","kty":"OKP","x":"&lt;k&gt;"}
+</pre><a href="#appendix-A.2-2" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.2-3">
+          The SHA-256 digest is encoded as unpadded base64url. Implementations MUST NOT hash the
+          raw public key bytes directly for `keyid`.<a href="#appendix-A.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="request-response-shape">
+<section id="appendix-A.3">
+        <h3 id="name-request-and-response-shape">
+<a href="#appendix-A.3" class="section-number selfRef">A.3. </a><a href="#name-request-and-response-shape" class="section-name selfRef">Request and Response Shape</a>
+        </h3>
+<p id="appendix-A.3-1">
+          Validated RFC 9421 <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span> Structured Fields shape:<a href="#appendix-A.3-1" class="pilcrow">¶</a></p>
+<div class="lang-http-message sourcecode" id="appendix-A.3-2">
+<pre>
+Accept-Signature: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "@status");created;expires;
+  keyid="&lt;jwk-thumbprint&gt;";alg="ed25519";
+  nonce="&lt;client-challenge&gt;";tag="aid-pka-v2"
+Signature-Input: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "@status");created=&lt;unix&gt;;expires=&lt;unix&gt;;
+  keyid="&lt;jwk-thumbprint&gt;";alg="ed25519";
+  nonce="&lt;client-challenge&gt;";tag="aid-pka-v2"
+Signature: aid-pka=:&lt;base64-signature&gt;:
+Cache-Control: no-store
+</pre><a href="#appendix-A.3-2" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.3-3">
+          The signature MUST NOT cover HTTP `Date`.<a href="#appendix-A.3-3" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-4">
+          The client challenge MUST contain at least 32 bytes of entropy and SHOULD be
+          transported as unpadded base64url in the RFC 9421 `nonce` signature parameter. The
+          verifier MUST compare the received `nonce` exactly to the challenge it sent. Servers are
+          not required to store nonce state in v2 core because the verifier supplies the one-shot
+          nonce and the signed response is not cacheable.<a href="#appendix-A.3-4" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-5">
+          `created` and `expires` are mandatory. `expires` MUST be greater than `created`.
+          `expires` minus `created` MUST NOT exceed 300 seconds and SHOULD be 60 seconds or less.
+          Verifiers MAY allow a small clock-skew tolerance when evaluating `created` and
+          `expires`.<a href="#appendix-A.3-5" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-6">
+          Signers MUST emit `alg="ed25519"` lowercase. Verifiers MUST compare the semantic
+          algorithm value case-insensitively and MUST reconstruct `@signature-params` from the
+          received Structured Field value.<a href="#appendix-A.3-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="covered-components">
+<section id="appendix-A.4">
+        <h3 id="name-covered-components">
+<a href="#appendix-A.4" class="section-number selfRef">A.4. </a><a href="#name-covered-components" class="section-name selfRef">Covered Components</a>
+        </h3>
+<p id="appendix-A.4-1">
+          The base v2 PKA response signature covers `"@method";req`, `"@target-uri";req`,
+          `"@authority";req`, and `"@status"`. `@method`, `@target-uri`, and `@authority` are
+          request-derived components and therefore use `;req`. `@status` is response-derived and
+          does not use `;req`. The domain-binding profile in
+          <a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a> extends this base covered set with
+          `"aid-domain";req`; the tag remains `aid-pka-v2`.<a href="#appendix-A.4-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.4-2">
+          `@status` signs the status actually returned. PKA does not require status `200`. A
+          signed `401` can still prove endpoint authenticity before an OAuth or auth.md handoff
+          continues.<a href="#appendix-A.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="uri-authority-redirects">
+<section id="appendix-A.5">
+        <h3 id="name-uri-authority-and-redirects">
+<a href="#appendix-A.5" class="section-number selfRef">A.5. </a><a href="#name-uri-authority-and-redirects" class="section-name selfRef">URI, Authority, and Redirects</a>
+        </h3>
+<p id="appendix-A.5-1">
+          Clients MUST NOT follow redirects during PKA verification. The request context is the
+          discovered endpoint URI after fragment removal. Query strings are preserved.<a href="#appendix-A.5-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.5-2">
+          `@authority` uses the externally visible request authority: lowercase hostname, omit
+          the default port, retain a non-default port. Servers behind reverse proxies must sign
+          the externally visible request context, not internal hop-local scheme, host, or port
+          values.<a href="#appendix-A.5-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="verifier-summary">
+<section id="appendix-A.6">
+        <h3 id="name-verifier-summary">
+<a href="#appendix-A.6" class="section-number selfRef">A.6. </a><a href="#name-verifier-summary" class="section-name selfRef">Verifier Summary</a>
+        </h3>
+<p id="appendix-A.6-1">
+          A verifier accepts a v2 PKA response only when:<a href="#appendix-A.6-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.6-2">
+          <li id="appendix-A.6-2.1">The selected AID record contains a valid v2 `k`.<a href="#appendix-A.6-2.1" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.2">The response contains a valid `Signature-Input` and `Signature`.<a href="#appendix-A.6-2.2" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.3">The tag is `tag="aid-pka-v2"` and the covered components are either exactly the four
+          components in <a href="#covered-components" class="auto internal xref">Appendix A.4</a>, or those four plus the optional
+          `"aid-domain";req` component (between `"@authority";req` and `"@status"`) per the
+          domain-binding profile in <a href="#pka-domain-binding" class="auto internal xref">Appendix A.7</a>.<a href="#appendix-A.6-2.3" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.4">`keyid` equals the RFC 7638 thumbprint derived from DNS `k`.<a href="#appendix-A.6-2.4" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.5">`alg` has semantic value `ed25519`.<a href="#appendix-A.6-2.5" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.6">`nonce` exactly equals the verifier-generated challenge.<a href="#appendix-A.6-2.6" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.7">`created` and `expires` pass freshness checks.<a href="#appendix-A.6-2.7" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.8">The response includes `Cache-Control: no-store`.<a href="#appendix-A.6-2.8" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.6-2.9">Ed25519 verification succeeds over the reconstructed RFC 9421 signature base.<a href="#appendix-A.6-2.9" class="pilcrow">¶</a>
+</li>
+        </ol>
+</section>
+</div>
+<div id="pka-domain-binding">
+<section id="appendix-A.7">
+        <h3 id="name-domain-binding">
+<a href="#appendix-A.7" class="section-number selfRef">A.7. </a><a href="#name-domain-binding" class="section-name selfRef">Domain Binding</a>
+        </h3>
+<p id="appendix-A.7-1">
+          This profile lets an endpoint prove that it consents to serve as the agent for the
+          queried domain, addressing the unauthorized-association gap described in
+          <a href="#what-pka-proves" class="auto internal xref">Section 5.1</a>. When `k` is present in an `aid2` record, clients
+          SHOULD request domain binding by default (see <a href="#algorithm" class="auto internal xref">Section 4.1</a>). The
+          domain-binding indicator in the discovery result is the expected outcome for
+          well-configured v2 deployments; clients that need a hard enforcement boundary use
+          `domain-binding=require` in enterprise policy (<a href="#enterprise-policy" class="auto internal xref">Section 5.3</a>).<a href="#appendix-A.7-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-2">
+          There is a single RFC 9421 tag for all v2 PKA proofs, `aid-pka-v2`. A proof is
+          domain-bound if and only if its signed covered set includes the `"aid-domain";req`
+          component, positioned strictly between `"@authority";req` and `"@status"`. The covered
+          set is part of `@signature-params`, which is itself signed, so coverage is authenticated
+          and cannot be altered without invalidating the signature. The `tag` identifies the
+          application profile per <span>[<a href="#RFC9421" class="cite xref">RFC9421</a>]</span> Section 2.3; it is the covered set, not
+          a separate tag, that distinguishes an unbound proof from a domain-bound one.<a href="#appendix-A.7-2" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-3">
+          A client requesting domain binding sends the queried domain in the `AID-Domain` request
+          header and requests an extended response signature whose covered set adds
+          `"aid-domain";req`:<a href="#appendix-A.7-3" class="pilcrow">¶</a></p>
+<div class="lang-http-message sourcecode" id="appendix-A.7-4">
+<pre>
+AID-Domain: example.com
+Accept-Signature: aid-pka=("@method";req "@target-uri";req
+  "@authority";req "aid-domain";req "@status");created;expires;
+  keyid="&lt;jwk-thumbprint&gt;";alg="ed25519";
+  nonce="&lt;client-challenge&gt;";tag="aid-pka-v2"
+</pre><a href="#appendix-A.7-4" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.7-5">
+          The `AID-Domain` value is the exact host the client queried in
+          <a href="#algorithm" class="auto internal xref">Section 4.1</a> (step 2), normalized to its A-label form per
+          <a href="#algorithm" class="auto internal xref">Section 4.1</a> (step 1), lowercased, and without a trailing dot or port.
+          Signer and verifier MUST use this identical byte value.<a href="#appendix-A.7-5" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-6">
+          A server that supports this profile and serves the named domain responds with the
+          <a href="#request-response-shape" class="auto internal xref">Appendix A.3</a> shape, except that the covered set includes
+          `"aid-domain";req` after `"@authority";req`. The `aid-domain` component is the request
+          header field; its RFC 9421 component identifier is the lowercased field name
+          `aid-domain`, so the signature binds the exact value the client sent.<a href="#appendix-A.7-6" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-7">
+          A server that supports this profile but does not serve the named domain MUST NOT
+          produce a signature covering that `AID-Domain` value. It SHOULD respond with status
+          `403` and no `Signature-Input` header. A server that does not support this profile
+          ignores the header and responds with the base <a href="#request-response-shape" class="auto internal xref">Appendix A.3</a>
+          shape, whose covered set omits `aid-domain`, which remains a valid endpoint proof
+          without domain binding.<a href="#appendix-A.7-7" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-8">
+          A response that carries no valid `aid-pka-v2` signature, including a `403` refusal, is
+          a failed endpoint proof under <a href="#security" class="auto internal xref">Section 5</a>, so discovery fails whenever the
+          selected record contains `k`. A profile-aware endpoint that refuses an unserved domain
+          therefore causes discovery to fail for that domain, which is the intended outcome.<a href="#appendix-A.7-8" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-9">
+          Verifier rules, in addition to <a href="#verifier-summary" class="auto internal xref">Appendix A.6</a>:<a href="#appendix-A.7-9" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.7-10">
+          <li id="appendix-A.7-10.1">The covered set of an `aid-pka-v2` response MUST be exactly the four base
+          components of <a href="#request-response-shape" class="auto internal xref">Appendix A.3</a>, or those four base components
+          plus `"aid-domain";req` (between `"@authority";req` and `"@status"`) and nothing else. A
+          response whose covered set includes `aid-domain` is domain-bound; one whose covered set
+          omits it is unbound.<a href="#appendix-A.7-10.1" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.7-10.2">A response is verified as domain-bound only when its covered set includes
+          `"aid-domain";req`. A client that sent an `AID-Domain` request header rebuilds the
+          signature base using its own canonical queried domain as the `aid-domain` value; a
+          domain-bound proof verifies only when the signed domain matches that value.<a href="#appendix-A.7-10.2" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.7-10.3">A client that did not send `AID-Domain` MUST reject a response whose covered set
+          includes `aid-domain` (fail-closed).<a href="#appendix-A.7-10.3" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.7-10.4">Clients that request domain binding MUST expose a boolean domain-binding indicator
+          as part of PKA state, set `true` only when `aid-domain` was covered and the proof
+          verified for the queried domain, and `false` for a verified unbound proof.<a href="#appendix-A.7-10.4" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-A.7-10.5">Requesting domain binding does not by itself mitigate unauthorized association,
+          because an attacker-controlled endpoint can ignore `AID-Domain` and return a valid
+          unbound proof. A client gains the mitigation only when it requires domain binding and
+          rejects unbound proofs by local policy.<a href="#appendix-A.7-10.5" class="pilcrow">¶</a>
+</li>
+        </ol>
+<p id="appendix-A.7-11">
+          Domain binding is a statement by the endpoint that it serves the named domain. It does
+          not prove authorization, delegation, or organizational identity.<a href="#appendix-A.7-11" class="pilcrow">¶</a></p>
+<p id="appendix-A.7-12">
+          In AID v2, domain binding is optional-but-default: clients SHOULD send `AID-Domain`,
+          and an unbound proof (one whose covered set omits `aid-domain`) remains a valid outcome
+          unless local policy requires binding (`domain-binding=require`; see
+          <a href="#enterprise-policy" class="auto internal xref">Section 5.3</a>). A future major version (`aid3`) is expected to make
+          sending `AID-Domain` REQUIRED for clients performing PKA and to make rejecting unbound
+          proofs the baseline. Establishing high adoption while the installed base is small is
+          intended to minimize switching cost at that transition; implementations that already
+          send `AID-Domain` by default require no change at `aid3`.<a href="#appendix-A.7-12" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="well-known-fallback">
+<section id="appendix-B">
+      <h2 id="name-well-known-fallback">
+<a href="#appendix-B" class="section-number selfRef">Appendix B. </a><a href="#name-well-known-fallback" class="section-name selfRef">.well-known Fallback</a>
+      </h2>
+<p id="appendix-B-1">
+        AID remains DNS-first. The `.well-known` fallback is a convenience for environments
+        where publishing DNS TXT records is difficult. It does not change the RFC 8552 scope of
+        `_agent`.<a href="#appendix-B-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="appendix-B-2.1">Path: `GET https://&lt;domain&gt;/.well-known/agent`<a href="#appendix-B-2.1" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="appendix-B-2.2">Format: JSON mirroring v2 record keys.<a href="#appendix-B-2.2" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="appendix-B-2.3">Trust source: `well-known-tls`.<a href="#appendix-B-2.3" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="appendix-B-2.4">Security: TLS certificate validation still applies. `pka` may still apply, but it
+        proves consistency with TLS-hosted metadata, not DNS-published external trust.<a href="#appendix-B-2.4" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="appendix-B-2.5">Client behavior: use DNS first and fall back only on `ERR_NO_RECORD` or
+        `ERR_DNS_LOOKUP_FAILED`.<a href="#appendix-B-2.5" class="pilcrow">¶</a>
+</li>
+        <li class="normal" id="appendix-B-2.6">Error mapping: use `ERR_FALLBACK_FAILED` when the fallback fails or is invalid.<a href="#appendix-B-2.6" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="appendix-B-3">
+        DNS-discovered records have `trustSource=dns`. Fallback-discovered records have
+        `trustSource=well-known-tls`. If a policy requires DNSSEC-backed trust, `.well-known`
+        cannot satisfy it. The `.well-known` URI convention itself is described in
+        <span>[<a href="#RFC8615" class="cite xref">RFC8615</a>]</span>.<a href="#appendix-B-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="composition-notes">
+<section id="appendix-C">
+      <h2 id="name-composition-notes">
+<a href="#name-composition-notes" class="section-name selfRef">Composition Notes</a>
+      </h2>
+<p id="appendix-C-1">
+        This appendix is non-normative. It describes how AID composes with adjacent mechanisms
+        without incorporating them into AID core.<a href="#appendix-C-1" class="pilcrow">¶</a></p>
+<div id="composition-signature-primitives">
+<section id="appendix-C.1">
+        <h3 id="name-web-bot-auth">
+<a href="#name-web-bot-auth" class="section-name selfRef">Web Bot Auth</a>
+        </h3>
+<p id="appendix-C.1-1">
+          AID v2 follows Web Bot Auth where the layers match: Ed25519, RFC 9421 HTTP Message
+          Signatures, RFC 7638 JWK thumbprints, `created`, `expires`, `nonce`, and `tag`.<a href="#appendix-C.1-1" class="pilcrow">¶</a></p>
+<p id="appendix-C.1-2">
+          AID does not become Web Bot Auth. Web Bot Auth signs automated client requests to
+          origins. AID PKA proves endpoint control for a DNS-discovered agent endpoint.<a href="#appendix-C.1-2" class="pilcrow">¶</a></p>
+<p id="appendix-C.1-3">
+          Operators may reuse key material across AID and Web Bot Auth if their threat model
+          allows it, but this document does not recommend reuse. Reuse shares blast radius
+          between endpoint proof and request-signing.<a href="#appendix-C.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="composition-authorization">
+<section id="appendix-C.2">
+        <h3 id="name-authorization-and-oauth">
+<a href="#name-authorization-and-oauth" class="section-name selfRef">Authorization and OAuth</a>
+        </h3>
+<p id="appendix-C.2-1">
+          AID can support an authorization handoff without adding authorization-specific fields
+          to core:<a href="#appendix-C.2-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-C.2-2">
+          <li id="appendix-C.2-2.1">AID resolves a domain to `u` and `p`.<a href="#appendix-C.2-2.1" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-C.2-2.2">If `k` is present, PKA verifies the endpoint.<a href="#appendix-C.2-2.2" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-C.2-2.3">The client follows the endpoint's protocol and authorization layer, including
+          RFC 9728 <span>[<a href="#RFC9728" class="cite xref">RFC9728</a>]</span> OAuth 2.0 Protected Resource Metadata and RFC 8414
+          <span>[<a href="#RFC8414" class="cite xref">RFC8414</a>]</span> OAuth 2.0 Authorization Server Metadata where present.<a href="#appendix-C.2-2.3" class="pilcrow">¶</a>
+</li>
+        </ol>
+<p id="appendix-C.2-3">
+          AID does not specify audience restriction, provider trust lists, registration payloads,
+          scopes, credential types, revocation, or an authorization metadata registry.<a href="#appendix-C.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="composition-workload-identity">
+<section id="appendix-C.3">
+        <h3 id="name-spiffe-and-wimse">
+<a href="#name-spiffe-and-wimse" class="section-name selfRef">SPIFFE and WIMSE</a>
+        </h3>
+<p id="appendix-C.3-1">
+          AID may be used by future SPIFFE or WIMSE profiles as a public first-contact anchor.<a href="#appendix-C.3-1" class="pilcrow">¶</a></p>
+<p id="appendix-C.3-2">
+          AID v2 core does not define:<a href="#appendix-C.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="appendix-C.3-3.1">SPIFFE trust-domain mapping;<a href="#appendix-C.3-3.1" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="appendix-C.3-3.2">SPIFFE bundle federation;<a href="#appendix-C.3-3.2" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="appendix-C.3-3.3">WIMSE hop re-binding;<a href="#appendix-C.3-3.3" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="appendix-C.3-3.4">OAuth client registration;<a href="#appendix-C.3-3.4" class="pilcrow">¶</a>
+</li>
+          <li class="normal" id="appendix-C.3-3.5">workload authorization.<a href="#appendix-C.3-3.5" class="pilcrow">¶</a>
+</li>
+        </ul>
+</section>
+</div>
+<div id="composition-key-addressed-identity">
+<section id="appendix-C.4">
+        <h3 id="name-relationship-to-key-address">
+<a href="#name-relationship-to-key-address" class="section-name selfRef">Relationship to Key-Addressed Identity Models</a>
+        </h3>
+<p id="appendix-C.4-1">
+          AID v2 remains compatible with the general idea of compact Ed25519 key material as used
+          by some key-addressed identity designs, but it does not adopt a key-addressed identity
+          model. In such designs, the public key itself is the address and DNS-shaped records are
+          signed directly under that key. AID remains DNS-authority-rooted: the DNS owner
+          publishes the current endpoint and current endpoint-proof key inside a TXT payload at a
+          name derived from the domain, not from the key.<a href="#appendix-C.4-1" class="pilcrow">¶</a></p>
+<p id="appendix-C.4-2">
+          Specification and reviewer-facing language should say "DNS-current endpoint/key" and
+          should not imply self-certifying names, key-addressed identity, or cryptographic
+          continuity across key changes.<a href="#appendix-C.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="migration-notes">
+<section id="appendix-D">
+      <h2 id="name-migration-notes">
+<a href="#name-migration-notes" class="section-name selfRef">Migration Notes</a>
+      </h2>
+<p id="appendix-D-1">This appendix is non-normative.<a href="#appendix-D-1" class="pilcrow">¶</a></p>
+<div id="provider-migration">
+<section id="appendix-D.1">
+        <h3 id="name-provider-migration">
+<a href="#name-provider-migration" class="section-name selfRef">Provider Migration</a>
+        </h3>
+<ol start="1" type="1" class="normal type-1" id="appendix-D.1-1">
+          <li id="appendix-D.1-1.1">Inventory current legacy `aid1` records.<a href="#appendix-D.1-1.1" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.1-1.2">For PKA records, decode the v1 multibase/base58btc `k` to the 32-byte Ed25519
+          public key.<a href="#appendix-D.1-1.2" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.1-1.3">Encode those bytes as unpadded base64url. This is the v2 `k`.<a href="#appendix-D.1-1.3" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.1-1.4">Publish `v=aid2` with the same endpoint, protocol, and v2 `k`, without `i`.<a href="#appendix-D.1-1.4" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.1-1.5">Keep `aid1` during the compatibility window.<a href="#appendix-D.1-1.5" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.1-1.6">Remove `aid1` after old-client support is no longer needed.<a href="#appendix-D.1-1.6" class="pilcrow">¶</a>
+</li>
+        </ol>
+</section>
+</div>
+<div id="client-migration">
+<section id="appendix-D.2">
+        <h3 id="name-client-migration">
+<a href="#name-client-migration" class="section-name selfRef">Client Migration</a>
+        </h3>
+<ol start="1" type="1" class="normal type-1" id="appendix-D.2-1">
+          <li id="appendix-D.2-1.1">Support both `aid1` and `aid2` parsing.<a href="#appendix-D.2-1.1" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.2-1.2">Partition records by version before ambiguity checks.<a href="#appendix-D.2-1.2" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.2-1.3">Prefer `aid2` when both versions are valid and policy allows it.<a href="#appendix-D.2-1.3" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.2-1.4">Keep legacy PKA handling only for `aid1` records.<a href="#appendix-D.2-1.4" class="pilcrow">¶</a>
+</li>
+          <li id="appendix-D.2-1.5">Store previous security state using derived JWK thumbprints so a same-key `aid1`
+          to `aid2` migration does not look like key replacement.<a href="#appendix-D.2-1.5" class="pilcrow">¶</a>
+</li>
+        </ol>
+</section>
+</div>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-E">
+      <h2 id="name-authors-address">
+<a href="#name-authors-address" class="section-name selfRef">Author's Address</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Balazs Nemethi (<span class="role">editor</span>)</span></div>
+<div dir="auto" class="left"><span class="org">Open Agent Registry, Inc.</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:balazs@agentcommunity.org" class="email">balazs@agentcommunity.org</a>
+</div>
+<div class="url">
+<span>URI:</span>
+<a href="https://agentcommunity.org" class="url">https://agentcommunity.org</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
