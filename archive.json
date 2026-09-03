@@ -1,6 +1,6 @@
 {
   "magic": "E!vIA5L86J2I",
-  "timestamp": "2026-09-01T04:30:26.494236+00:00",
+  "timestamp": "2026-09-03T03:52:19.654204+00:00",
   "repo": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
   "labels": [
     {
@@ -82,6 +82,34 @@
       "mergedBy": "nembal",
       "mergeCommit": {
         "oid": "69dee6b8020d73ed48d9b7309783129d6d5e8011"
+      },
+      "comments": [],
+      "reviews": []
+    },
+    {
+      "number": 2,
+      "id": "PR_kwDORjD4g88AAAABB38Ktg",
+      "title": "Rename to draft-nemethi-dawn-aid and update to AID v2.0/v2.1 spec",
+      "url": "https://github.com/agentcommunity/draft-nemethi-aid-agent-identity-discovery/pull/2",
+      "state": "MERGED",
+      "author": "nembal",
+      "authorAssociation": "CONTRIBUTOR",
+      "assignees": [],
+      "labels": [],
+      "body": "## Summary\n- Renames the draft from `draft-nemethi-aid-agent-identity-discovery` to `draft-nemethi-dawn-aid`, per Toerless Eckert's suggestion on the dawn@ietf.org list (2026-05-05), so it's discoverable via the DAWN document-name convention (matching `draft-king-dawn-requirements`, `draft-jimenez-dawn-discovery-landscape`).\n- Rewrites the content from the stale AID v1.2 wire format (submitted 2026-03-16, never updated) to the current normative AID v2 spec: `aid2` record with base64url Ed25519 JWK `x`-value keys, RFC 7638 JWK-thumbprint `keyid`, and the PKA domain-binding profile (`AID-Domain` header, `aid-pka-v2` tag, unauthorized-association mitigation).\n- Cross-checked against `packages/docs/specification.md` (3-agent verification pass) and fixed every gap found: dropped MUST, missing migration step, over-generalized adjacent-spec naming, and a dead `aid-tokens` repo reference carried over unchanged from the original March draft.\n- Verified clean with `idnits3` in submission mode (0 errors, 0 warnings, 0 comments) on the properly `-00`-named build.\n\nIntended to replace `draft-nemethi-aid-agent-identity-discovery` as a new `-00` submission with an explicit Replaces relationship set at datatracker upload.\n\n## Test plan\n- [x] `xml2rfc draft-nemethi-dawn-aid.xml --text` builds clean, no warnings\n- [x] `idnits -m submission` on the `-00`-named build: PASS, no nits\n- [x] Content cross-checked against current `specification.md` (normative requirements, wire-format/registries, PKA/domain-binding security text)\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)",
+      "createdAt": "2026-09-02T09:30:02Z",
+      "updatedAt": "2026-09-02T09:30:14Z",
+      "baseRepository": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
+      "baseRefName": "main",
+      "baseRefOid": "214e9a97cdb9f9fc51098ae3ce16a2539939017c",
+      "headRepository": "agentcommunity/draft-nemethi-aid-agent-identity-discovery",
+      "headRefName": "dawn-aid-v2-rename",
+      "headRefOid": "15dc82532298ee6b5aed8d0a6b2276182b68e7c8",
+      "closedAt": "2026-09-02T09:30:11Z",
+      "mergedAt": "2026-09-02T09:30:11Z",
+      "mergedBy": "nembal",
+      "mergeCommit": {
+        "oid": "be3f3e0910678e5e4cc9e6b50241e0c01919e74d"
       },
       "comments": [],
       "reviews": []
