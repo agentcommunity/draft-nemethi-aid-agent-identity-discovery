@@ -756,6 +756,13 @@ _agent.acme.com. 300 IN TXT (
       <section anchor="proto-registry">
         <name>Protocol Tokens</name>
         <t>All protocol tokens are case-sensitive and use lowercase ASCII.</t>
+        <t>
+          A protocol token tells the client which protocol to speak at `uri`. The referenced
+          specification defines that protocol, including its transport, authentication, and
+          capability negotiation; AID does not extend or constrain it. Every protocol token
+          <bcp14>MUST</bcp14> list a reference, and proposals for new tokens <bcp14>MUST</bcp14>
+          include one.
+        </t>
         <table anchor="aid-proto-registry-table">
           <name>Protocol Tokens</name>
           <thead>
@@ -763,6 +770,7 @@ _agent.acme.com. 300 IN TXT (
               <th>Token</th>
               <th>Meaning</th>
               <th>Allowed `uri` scheme(s)</th>
+              <th>Reference</th>
             </tr>
           </thead>
           <tbody>
@@ -770,46 +778,55 @@ _agent.acme.com. 300 IN TXT (
               <td>mcp</td>
               <td>Model Context Protocol</td>
               <td>https://</td>
+              <td><xref target="MCP"/></td>
             </tr>
             <tr>
               <td>a2a</td>
               <td>Agent-to-Agent Protocol</td>
               <td>https://</td>
+              <td><xref target="A2A"/></td>
             </tr>
             <tr>
               <td>openapi</td>
               <td>OpenAPI specification document</td>
               <td>https://</td>
+              <td><xref target="OPENAPI"/></td>
             </tr>
             <tr>
               <td>grpc</td>
               <td>gRPC over HTTP/2 or HTTP/3</td>
               <td>https://</td>
+              <td><xref target="GRPC-HTTP2"/></td>
             </tr>
             <tr>
               <td>graphql</td>
               <td>GraphQL over HTTP</td>
               <td>https://</td>
+              <td><xref target="GRAPHQL-HTTP"/></td>
             </tr>
             <tr>
               <td>websocket</td>
               <td>WebSocket transport</td>
               <td>wss://</td>
+              <td><xref target="RFC6455"/></td>
             </tr>
             <tr>
               <td>local</td>
               <td>The agent runs locally on the client machine</td>
               <td>docker:, npx:, pip:</td>
+              <td><xref target="security"/> of this document</td>
             </tr>
             <tr>
               <td>zeroconf</td>
               <td>mDNS or DNS-SD service discovery</td>
               <td>zeroconf:&lt;service_type&gt;</td>
+              <td><xref target="RFC6762"/>, <xref target="RFC6763"/></td>
             </tr>
             <tr>
               <td>ucp</td>
               <td>Universal Commerce Protocol</td>
               <td>https://</td>
+              <td><xref target="UCP"/></td>
             </tr>
           </tbody>
         </table>
@@ -945,6 +962,27 @@ _agent.acme.com. 300 IN TXT (
         <seriesInfo name="RFC" value="8615"/>
       </reference>
       <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9728.xml"/>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6455.xml"/>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6762.xml"/>
+      <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6763.xml"/>
+      <reference anchor="MCP" target="https://modelcontextprotocol.io/specification">
+        <front><title>Model Context Protocol Specification</title><author><organization>Model Context Protocol</organization></author><date/></front>
+      </reference>
+      <reference anchor="A2A" target="https://a2a-protocol.org/latest/specification/">
+        <front><title>Agent2Agent (A2A) Protocol Specification</title><author><organization>A2A Project</organization></author><date/></front>
+      </reference>
+      <reference anchor="OPENAPI" target="https://spec.openapis.org/oas/latest.html">
+        <front><title>OpenAPI Specification</title><author><organization>OpenAPI Initiative</organization></author><date/></front>
+      </reference>
+      <reference anchor="GRPC-HTTP2" target="https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md">
+        <front><title>gRPC over HTTP2</title><author><organization>gRPC Authors</organization></author><date/></front>
+      </reference>
+      <reference anchor="GRAPHQL-HTTP" target="https://graphql.github.io/graphql-over-http/">
+        <front><title>GraphQL over HTTP</title><author><organization>GraphQL Foundation</organization></author><date/></front>
+      </reference>
+      <reference anchor="UCP" target="https://ucp.dev/specification/overview/">
+        <front><title>Universal Commerce Protocol Specification</title><author><organization>Universal Commerce Protocol</organization></author><date/></front>
+      </reference>
       <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8414.xml"/>
       <reference anchor="RFC-NEMETHI-AID-00" target="https://datatracker.ietf.org/doc/html/draft-nemethi-aid-agent-identity-discovery-00">
         <front>
