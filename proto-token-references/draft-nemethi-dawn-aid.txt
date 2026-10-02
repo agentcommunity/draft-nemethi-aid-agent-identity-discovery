@@ -4,8 +4,8 @@
 
 Network Working Group                                    B. Nemethi, Ed.
 Internet-Draft                                 Open Agent Registry, Inc.
-Intended status: Informational                          2 September 2026
-Expires: 6 March 2027
+Intended status: Informational                            2 October 2026
+Expires: 5 April 2027
 
 
                    Agent Identity and Discovery (AID)
@@ -44,7 +44,7 @@ Status of This Memo
    time.  It is inappropriate to use Internet-Drafts as reference
    material or to cite them other than as "work in progress."
 
-   This Internet-Draft will expire on 6 March 2027.
+   This Internet-Draft will expire on 5 April 2027.
 
 Copyright Notice
 
@@ -799,32 +799,47 @@ Table of Contents
 
    All protocol tokens are case-sensitive and use lowercase ASCII.
 
-     +===========+=========================+=========================+
-     | Token     | Meaning                 | Allowed `uri` scheme(s) |
-     +===========+=========================+=========================+
-     | mcp       | Model Context Protocol  | https://                |
-     +-----------+-------------------------+-------------------------+
-     | a2a       | Agent-to-Agent Protocol | https://                |
-     +-----------+-------------------------+-------------------------+
-     | openapi   | OpenAPI specification   | https://                |
-     |           | document                |                         |
-     +-----------+-------------------------+-------------------------+
-     | grpc      | gRPC over HTTP/2 or     | https://                |
-     |           | HTTP/3                  |                         |
-     +-----------+-------------------------+-------------------------+
-     | graphql   | GraphQL over HTTP       | https://                |
-     +-----------+-------------------------+-------------------------+
-     | websocket | WebSocket transport     | wss://                  |
-     +-----------+-------------------------+-------------------------+
-     | local     | The agent runs locally  | docker:, npx:, pip:     |
-     |           | on the client machine   |                         |
-     +-----------+-------------------------+-------------------------+
-     | zeroconf  | mDNS or DNS-SD service  | zeroconf:<service_type> |
-     |           | discovery               |                         |
-     +-----------+-------------------------+-------------------------+
-     | ucp       | Universal Commerce      | https://                |
-     |           | Protocol                |                         |
-     +-----------+-------------------------+-------------------------+
+   A protocol token tells the client which protocol to speak at `uri`.
+   The referenced specification defines that protocol, including its
+   transport, authentication, and capability negotiation; AID does not
+   extend or constrain it.  Every protocol token MUST list a reference,
+   and proposals for new tokens MUST include one.
+
+    +=========+==============+=========================+==============+
+    |Token    |Meaning       | Allowed `uri` scheme(s) |Reference     |
+    +=========+==============+=========================+==============+
+    |mcp      |Model Context | https://                |[MCP]         |
+    |         |Protocol      |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |a2a      |Agent-to-Agent| https://                |[A2A]         |
+    |         |Protocol      |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |openapi  |OpenAPI       | https://                |[OPENAPI]     |
+    |         |specification |                         |              |
+    |         |document      |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |grpc     |gRPC over     | https://                |[GRPC-HTTP2]  |
+    |         |HTTP/2 or     |                         |              |
+    |         |HTTP/3        |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |graphql  |GraphQL over  | https://                |[GRAPHQL-HTTP]|
+    |         |HTTP          |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |websocket|WebSocket     | wss://                  |[RFC6455]     |
+    |         |transport     |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |local    |The agent runs| docker:, npx:, pip:     |Section 5 of  |
+    |         |locally on the|                         |this document |
+    |         |client machine|                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |zeroconf |mDNS or DNS-SD| zeroconf:<service_type> |[RFC6762],    |
+    |         |service       |                         |[RFC6763]     |
+    |         |discovery     |                         |              |
+    +---------+--------------+-------------------------+--------------+
+    |ucp      |Universal     | https://                |[UCP]         |
+    |         |Commerce      |                         |              |
+    |         |Protocol      |                         |              |
+    +---------+--------------+-------------------------+--------------+
 
                           Table 3: Protocol Tokens
 
@@ -941,6 +956,37 @@ Table of Contents
 
 12.  Informative References
 
+   [A2A]      A2A Project, "Agent2Agent (A2A) Protocol Specification",
+              <https://a2a-protocol.org/latest/specification/>.
+
+   [GRAPHQL-HTTP]
+              GraphQL Foundation, "GraphQL over HTTP",
+              <https://graphql.github.io/graphql-over-http/>.
+
+   [GRPC-HTTP2]
+              gRPC Authors, "gRPC over HTTP2",
+              <https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-
+              HTTP2.md>.
+
+   [MCP]      Model Context Protocol, "Model Context Protocol
+              Specification",
+              <https://modelcontextprotocol.io/specification>.
+
+   [OPENAPI]  OpenAPI Initiative, "OpenAPI Specification",
+              <https://spec.openapis.org/oas/latest.html>.
+
+   [RFC6455]  Fette, I. and A. Melnikov, "The WebSocket Protocol",
+              RFC 6455, DOI 10.17487/RFC6455, December 2011,
+              <https://www.rfc-editor.org/info/rfc6455>.
+
+   [RFC6762]  Cheshire, S. and M. Krochmal, "Multicast DNS", RFC 6762,
+              DOI 10.17487/RFC6762, February 2013,
+              <https://www.rfc-editor.org/info/rfc6762>.
+
+   [RFC6763]  Cheshire, S. and M. Krochmal, "DNS-Based Service
+              Discovery", RFC 6763, DOI 10.17487/RFC6763, February 2013,
+              <https://www.rfc-editor.org/info/rfc6763>.
+
    [RFC8414]  Jones, M., Sakimura, N., and J. Bradley, "OAuth 2.0
               Authorization Server Metadata", RFC 8414,
               DOI 10.17487/RFC8414, June 2018,
@@ -961,6 +1007,9 @@ Table of Contents
               identity-discovery-00, March 2026,
               <https://datatracker.ietf.org/doc/html/draft-nemethi-aid-
               agent-identity-discovery-00>.
+
+   [UCP]      Universal Commerce Protocol, "Universal Commerce Protocol
+              Specification", <https://ucp.dev/specification/overview/>.
 
 Appendix A.  PKA Handshake
 
